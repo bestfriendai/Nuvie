@@ -39,35 +39,35 @@ friend-aware recommendations** powered by a hybrid AI model.
 ## 🗂 Repository Structure
 
 nuvie/
-├── ai/ # AI & Machine Learning Layer
-│ ├── data/ # Raw & processed datasets
-│ ├── models/ # Recommendation algorithm implementations
-│ ├── training/ # Model training pipelines
-│ ├── evaluation/ # Offline evaluation metrics
-│ ├── serving/ # AI API service (FastAPI)
-│ └── explanations/ # Explainable AI logic
+├── ai/                        # 🤖 AI & Machine Learning Layer
+│   ├── data/                  # Raw & processed datasets
+│   ├── models/                # Recommendation algorithm implementations
+│   ├── training/              # Model training pipelines
+│   ├── evaluation/            # Offline evaluation metrics
+│   ├── serving/               # AI API service (FastAPI)
+│   └── explanations/          # Explainable AI logic
 │
-├── backend/ # Backend API & Business Logic
-│ ├── app/ # FastAPI route definitions
-│ ├── models/ # ORM models
-│ ├── db/ # Database connection & migrations
-│ ├── schemas/ # Pydantic schemas
-│ └── Dockerfile # Backend container
+├── backend/                   # ⚙️ Backend API & Business Logic
+│   ├── app/                   # FastAPI route definitions
+│   ├── models/                # ORM models
+│   ├── db/                    # Database connection & migrations
+│   ├── schemas/               # Pydantic schemas
+│   └── Dockerfile             # Backend container
 │
-├── ios/ # Native iOS App (Swift)
-│ └── NuvieApp/
-│ ├── Views/
-│ ├── ViewModels/
-│ ├── Network/
-│ ├── Models/
-│ └── Assets/
+├── ios/                       # 📱 Native iOS App (Swift)
+│   └── NuvieApp/
+│       ├── Views/             # UI screens
+│       ├── ViewModels/        # MVVM logic
+│       ├── Network/           # API & networking layer
+│       ├── Models/            # Data models
+│       └── Assets/            # Images, icons, colors
 │
-├── infra/ # DevOps & Deployment
-│ ├── docker-compose.yml
-│ ├── github-actions.yml
-│ └── env.example
+├── infra/                     # 🚀 DevOps & Deployment
+│   ├── docker-compose.yml    # Local development orchestration
+│   ├── github-actions.yml    # CI/CD pipeline
+│   └── env.example           # Environment variables template
 │
-└── README.md
+└── README.md                  # Project documentation
 
 
 
