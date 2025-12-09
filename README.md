@@ -123,6 +123,16 @@ nuvie/
 
 ---
 
+## 📋 Project Management & Task Tracking (Notion)
+
+We actively use **Notion** for:
+- Sprint planning
+- Phase-based task tracking
+- Team responsibilities
+- Progress monitoring
+
+---
+
 ## 🔄 Task-Based Development Roadmap
 
 ### Phase 1 — Foundation
