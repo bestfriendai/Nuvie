@@ -36,6 +36,7 @@ friend-aware recommendations** powered by a hybrid AI model.
 
 ---
 
+
 ## 🗂 Repository Structure
 
 nuvie/
@@ -157,19 +158,20 @@ cp infra/env.example .env
 docker-compose up --build
 ```
 
-###Backend will be available at:
+Backend will be available at:
 http://localhost:8000/docs
-###AI Service will be available at:
+
+AI Service will be available at:
 http://localhost:9000/docs
 
-##📊 Evaluation Metrics
+📊 Evaluation Metrics
 RMSE
 MAE
 Recall@K
 NDCG@K
 Friend-Aware Engagement Rate
 
-##📜 License
+📜 License
 This project is developed for academic and educational purposes.
 All rights reserved by Team Nuvie.
 
