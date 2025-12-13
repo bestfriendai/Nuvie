@@ -174,6 +174,43 @@ http://localhost:8000/docs
 AI Service will be available at:
 http://localhost:9000/docs
 
+Python dependencies
+- Install runtime and test deps for the AI modules and local evaluation with:
+
+```bash
+python -m pip install -r requirements.txt
+```
+The minimal `requirements.txt` includes `pandas`, `numpy` and `pytest` used by data pipelines, models and smoke tests.
+
+Optional ML dependencies
+- For model training or larger ML workloads, install optional ML packages:
+
+```bash
+python -m pip install -r requirements-ml.txt
+```
+- `requirements-ml.txt` contains `scikit-learn`; for deep learning, install `torch` or `tensorflow` following their official guides.
+
+PyTorch install notes
+- PyTorch wheels depend on your OS and CUDA version. We recommend installing PyTorch with the official selector at https://pytorch.org/get-started/locally/.
+
+Examples:
+
+- CPU-only (cross-platform):
+
+```bash
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+- CUDA 11.8 example (adjust for your CUDA version):
+
+```bash
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+Notes:
+- If you have a GPU and need CUDA support, pick the appropriate wheel (the selector on the PyTorch site helps).
+- TensorFlow is included in `requirements-ml.txt` pinned to a safe minor range; install with the same `pip` command above.
+
 📊 Evaluation Metrics
 RMSE
 MAE
