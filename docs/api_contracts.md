@@ -1,61 +1,63 @@
-# api contracts — nuvie
+# API Contracts — NUVIE
 
-this document defines the api contracts between ios, backend, and ai services. it lists all required data fields for ui components.
-
----
-
-## overview
-
-nuvie has three parts that work together:
-
-**ios app (swift)**
-- the frontend users interact with
-- sends requests to backend api
-- displays data to users
-
-**backend api (fastapi)**
-- handles business logic
-- manages authentication
-- talks to database
-- talks to ai service
-
-**ai service (fastapi)**
-- generates recommendations
-- creates explanations
-- serves trained models
-
-**how they connect**
-- ios app sends http requests to backend api
-- backend api sends requests to ai service (internal)
-- all responses use json format
+This document defines the API contracts between iOS, Backend, and AI services.
+It also lists required data fields for UI components and defines the internal Backend↔AI contract.
 
 ---
 
-## environments & base urls
+## Overview
 
-**backend**
-- base url: `https://api.nuvie.app` (prod)
-- base url: `http://localhost:8000` (dev)
+NUVIE has three parts that work together:
 
-**ai service (internal)**
-- base url: `http://ai-service:8000` (docker)
-- base url: `http://localhost:9000` (dev)
+**iOS App (Swift)**
+- The frontend users interact with
+- Sends requests to the Backend API
+- Displays data to users
+
+**Backend API (FastAPI)**
+- Handles business logic
+- Manages authentication
+- Talks to the database
+- Talks to the AI service
+
+**AI Service (FastAPI)**
+- Generates recommendations
+- Creates explanations
+- Serves trained models
+
+**How they connect**
+- iOS app sends HTTP requests to Backend API
+- Backend API sends internal requests to AI service
+- All responses use JSON
 
 ---
 
-## authentication
+## Environments & Base URLs
 
-### headers (backend)
-all authenticated requests must include:
+**Backend**
+- Prod: `https://api.nuvie.app`
+- Dev: `http://localhost:8000`
+
+**AI Service (internal)**
+- Docker: `http://ai-service:8000`
+- Dev: `http://localhost:9000`
+
+---
+
+## Authentication
+
+### Backend auth header
+All authenticated requests must include:
 
 ```text
 Authorization: Bearer {access_token}
-token expires after 24 hours. refresh endpoint available.
-internal auth (backend → ai)
-backend calls to ai service must include:
+Token expires after 24 hours
+Refresh endpoint available (TBD)
+Internal auth (Backend → AI)
+Backend calls to AI service must include:
 X-Internal-Token: {internal_secret}
-error responses (global)
-all endpoints return errors like this:
+Error Responses (Global)
+All endpoints return errors like this:
 {
   "error": {
     "code": "MOVIE_NOT_FOUND",
@@ -63,7 +65,7 @@ all endpoints return errors like this:
     "details": {}
   }
 }
-common error codes
+Common error codes
 AUTHENTICATION_REQUIRED - not logged in
 MOVIE_NOT_FOUND - movie doesn't exist
 USER_NOT_FOUND - user doesn't exist
@@ -71,13 +73,13 @@ RATING_INVALID - rating out of range
 FRIEND_REQUEST_EXISTS - request already sent
 RATE_LIMIT_EXCEEDED - too many requests
 INTERNAL_ERROR - unexpected error
-response pagination (backend)
-lists support pagination.
-query parameters
+Pagination (Backend)
+Lists support pagination.
+Query parameters
 
 limit (integer, default: 20, max: 100)
 offset (integer, default: 0)
-response format
+Standard response format
 {
   "items": [],
   "total_count": 150,
@@ -85,15 +87,16 @@ response format
   "offset": 0,
   "has_more": true
 }
-authentication api (ios → backend)
-endpoint: post /auth/login
-request
+iOS → Backend API
+Auth
+Endpoint: POST /auth/login
+Request
 {
   "provider": "apple",
   "token": "apple_id_token",
   "user_identifier": "user_apple_id"
 }
-response
+Response
 {
   "access_token": "jwt_token_string",
   "user": {
@@ -103,13 +106,13 @@ response
     "email": "user@example.com"
   }
 }
-required fields for ui
+Required fields for UI
 user.user_id (integer) - user id
 user.name (string) - display name
 user.avatar_url (string, optional) - profile picture
-movie data (ios → backend)
-endpoint: get /movies/{movie_id}
-response
+Movie Data
+Endpoint: GET /movies/{movie_id}
+Response
 {
   "movie_id": 1,
   "title": "The Matrix",
@@ -126,13 +129,13 @@ response
   "in_watchlist": false,
   "watch_status": null
 }
-required fields for ui
+Required fields for UI
 movie_id (integer)
 title (string)
 genres (array)
 poster_url (string, optional)
 overview (string, optional)
-release_date (string) - date "yyyy-mm-dd"
+release_date (string) - yyyy-mm-dd
 rating (float, optional) - average rating 1-5
 rating_count (integer, optional)
 user_rating (integer, optional) - 1-5
@@ -140,12 +143,12 @@ ai_score (integer, optional) - 0-100
 social_score (integer, optional) - 0-100
 in_watchlist (boolean)
 watch_status (string, optional) - started, completed, paused, or null
-recommendation feed (ios → backend)
-endpoint: get /feed/recommendations
-query parameters
+Recommendation Feed
+Endpoint: GET /feed/recommendations
+Query parameters
 limit (integer, default: 20)
 offset (integer, default: 0)
-response
+Response
 {
   "recommendations": [
     {
@@ -194,8 +197,8 @@ response
   "last_updated": "2024-01-15T10:30:00Z",
   "total_count": 50
 }
-required fields for ui
-recommendations[] - list of movies
+Required fields for UI
+recommendations[]
 all movie fields shown above (subset ok for feed)
 explanation
 primary_reason (string)
@@ -205,9 +208,9 @@ friend_ratings
 count (integer)
 average (float)
 friends[] (array)
-friends & social (ios → backend)
-endpoint: get /friends
-response
+Friends & Social
+Endpoint: GET /friends
+Response
 {
   "friends": [
     {
@@ -232,7 +235,7 @@ response
     }
   ]
 }
-required fields for ui
+Required fields for UI
 friends[]
 user_id (integer)
 name (string)
@@ -249,13 +252,13 @@ avatar_url (string, optional)
 mutual_friends (integer)
 shared_genres (array)
 match_score (integer 0-100)
-activity feed (ios → backend)
-endpoint: get /feed/activities
-query parameters
+Activity Feed
+Endpoint: GET /feed/activities
+Query parameters
 limit (integer, default: 20)
 offset (integer, default: 0)
 type (string, optional) - rating, review, watched, started, watchlist
-response
+Response
 {
   "activities": [
     {
@@ -274,7 +277,7 @@ response
   ],
   "total_count": 50
 }
-required fields for ui
+Required fields for UI
 activities[]
 activity_id (integer)
 user_id (integer)
@@ -286,16 +289,16 @@ movie_poster (string, optional)
 type (string) - rating, review, watched, started, watchlist
 rating (integer, optional)
 comment (string, optional)
-timestamp (string)
-ratings & reviews (ios → backend)
-endpoint: post /movies/{movie_id}/rate
-request
+timestamp (string) - ISO 8601
+Ratings & Reviews
+Endpoint: POST /movies/{movie_id}/rate
+Request
 {
   "rating": 5,
   "comment": "Amazing movie!",
   "is_review": true
 }
-response
+Response
 {
   "success": true,
   "rating": {
@@ -306,8 +309,8 @@ response
     "timestamp": "2024-01-15T10:30:00Z"
   }
 }
-endpoint: get /movies/{movie_id}/reviews
-response
+Endpoint: GET /movies/{movie_id}/reviews
+Response
 {
   "reviews": [
     {
@@ -325,26 +328,26 @@ response
   ],
   "total_count": 25
 }
-required fields for ui
+Required fields for UI
 reviews[]
 review_id (integer, optional)
 user_id (integer)
 user_name (string)
 user_avatar (string, optional)
 movie_id (integer)
-rating (integer) - 1-5 stars
+rating (integer) - 1-5
 comment (string, optional)
-timestamp (string)
+timestamp (string) - ISO 8601
 likes (integer)
 user_liked (boolean)
-search & discovery (ios → backend)
-endpoint: get /movies/search
-query parameters
+Search & Discovery
+Endpoint: GET /movies/search
+Query parameters
 q (string)
 genres (string, optional) - comma-separated genres
 limit (integer, default: 20)
 offset (integer, default: 0)
-response
+Response
 {
   "movies": [
     {
@@ -359,12 +362,9 @@ response
   ],
   "total_count": 150
 }
-required fields for ui
-same as movie data (subset ok)
-sorted by relevance
-user profile (ios → backend)
-endpoint: get /users/{user_id}
-response
+User Profile
+Endpoint: GET /users/{user_id}
+Response
 {
   "user_id": 1,
   "name": "Alex Johnson",
@@ -381,20 +381,9 @@ response
     "total_watch_time": 1200
   }
 }
-required fields for ui
-user_id (integer)
-name (string)
-avatar_url (string, optional)
-bio (string, optional)
-favorite_genres (array, optional)
-watched_count (integer)
-friends_count (integer)
-ratings_count (integer, optional)
-favorites_count (integer, optional)
-stats (object, optional)
-ai explanation data (ios → backend)
-endpoint: get /movies/{movie_id}/explanation
-response
+AI Explanation (per-movie)
+Endpoint: GET /movies/{movie_id}/explanation
+Response
 {
   "movie_id": 1,
   "ai_score": 94,
@@ -418,56 +407,40 @@ response
     "mutual_friends_watched": 2
   }
 }
-required fields for ui
-ai_score (integer) - overall score 0-100
-explanation
-primary_reason (string)
-confidence (float) - 0-1
-factors[]
-type (string)
-weight (float)
-value (varies)
-payload (object)
-description (string)
-social_signals
-friend_ratings_count (integer)
-friend_ratings_avg (float)
-friend_watch_count (integer)
-mutual_friends_watched (integer)
-watchlist & watch events (ios → backend)
-endpoint: post /movies/{movie_id}/watchlist
-request
+Watchlist & Watch Events
+Endpoint: POST /movies/{movie_id}/watchlist
+Request
 {
   "action": "add"
 }
-endpoint: post /movies/{movie_id}/watch
-request
+Endpoint: POST /movies/{movie_id}/watch
+Request
 {
   "event_type": "started",
   "progress_percent": 25
 }
-backend ↔ ai service contracts (internal)
-this section defines the internal contract between backend api and ai service.
-ios never calls these endpoints directly.
-ai reason type enum (shared)
-allowed factor types
+Backend ↔ AI Service Contracts (Internal)
+This section defines the internal contract between Backend API and AI service.
+iOS never calls these endpoints directly.
+Shared Explainability Types (Reason Types)
+Allowed factor types
 genre_match
 because_you_rated
 similar_users
 friend_activity
 trending
 popular
-rules
-type must be one of the above strings.
-payload must be small and safe for ui.
-description may be generated by ai or backend (preferred for i18n).
-recommendation score mapping (standard)
-ai service returns score as float [0, 1]
-backend maps to feed field ai_score = round(score * 100) (0-100)
-endpoint: post /ai/recommend
-headers
+Rules
+type must be one of the above strings
+payload must be small and UI-safe
+description may be generated by AI or Backend (recommended to generate in Backend for i18n)
+Score Mapping Standard
+AI service returns score as float in [0, 1]
+Backend maps: ai_score = round(score * 100) (0-100)
+Endpoint: POST /ai/recommend
+Headers
 X-Internal-Token: {internal_secret}
-request
+Request
 {
   "request_id": "uuid-1234",
   "user_id": 123,
@@ -477,11 +450,11 @@ request
   "context": {
     "use_social": true,
     "seed_movie_ids": [1, 2],
-    "locale": "tr-TR",
+    "locale": "en-US",
     "time": "2025-12-13T10:30:00Z"
   }
 }
-response
+Response
 {
   "request_id": "uuid-1234",
   "user_id": 123,
@@ -520,22 +493,22 @@ response
     }
   ]
 }
-required behavior
-request_id is generated by backend and must be returned unchanged by ai.
-exclude_movie_ids must be filtered out.
-limit max 50.
-cold start: if user has insufficient history, ai should return popular or trending reasons.
-endpoint: post /ai/explain
-headers
+Required behavior
+request_id is generated by Backend and must be returned unchanged by AI
+exclude_movie_ids must be filtered out
+limit max 50
+Cold start: if user history is insufficient, AI should return items with popular or trending reasons
+Endpoint: POST /ai/explain
+Headers
 X-Internal-Token: {internal_secret}
-request
+Request
 {
   "request_id": "uuid-999",
   "user_id": 123,
   "movie_id": 50,
   "context": { "use_social": true }
 }
-response
+Response
 {
   "request_id": "uuid-999",
   "user_id": 123,
@@ -560,41 +533,39 @@ response
     "friend_watch_count": 5
   }
 }
-ai errors (internal)
-ai service must use the global error format.
-common ai error codes
+AI Errors (Internal)
+AI service must use the global error format.
+Common AI error codes
 
 INVALID_REQUEST
 USER_NOT_FOUND
 MODEL_NOT_READY
 TIMEOUT
 INTERNAL_ERROR
-caching & ttl (backend)
-backend may cache ai results in database (example: recommendation_feed) using ttl_seconds.
-suggested behavior
+Caching & TTL (Backend)
+Backend may cache AI results in DB (example: recommendation_feed) using ttl_seconds.
+Suggested behavior
 
-if cached recs exist and are not expired: return cached
-else call /ai/recommend, store results, return
-data transformation notes
-genre parsing
+If cached recommendations exist and are not expired: return cached
+Else call /ai/recommend, store results, return
+Data Transformation Notes
+Genre parsing
 database: pipe-separated string "sci-fi|action|thriller"
 api: return as array ["sci-fi", "action", "thriller"]
 ios: expects array
-date formatting
-timestamps: iso 8601 format "2024-01-15T10:30:00Z" (uppercase T and Z)
+Date formatting
+timestamps: ISO 8601 format "2024-01-15T10:30:00Z" (uppercase T and Z)
 ios: converts to local time
-display: "2 hours ago" or date
-image urls
+Image URLs
 poster urls: full urls only
 fallback: placeholder if null
-sizes: w200, w500, original
-optional fields
+Optional fields
 use null explicitly (don't omit)
-ios: handles null gracefully
-ios integration notes
-use codable for json parsing
+ios must handle null gracefullyiOS Integration Notes
+
+use Codable for json parsing
 cache with core data for offline
-handle errors with retry
+handle errors with retry + user-friendly messaging
 show loading states
-pagination for infinite scroll
+implement pagination for infinite scroll
 cache images locally
