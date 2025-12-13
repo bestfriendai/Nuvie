@@ -1,0 +1,8 @@
+{
+  "movies": 3883,
+  "ratings": 1000209,
+  "users": 6040,
+  "items": 3706,
+  "min_rating": 1.0,
+  "max_rating": 5.0
+}
