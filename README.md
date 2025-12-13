@@ -79,11 +79,110 @@ nuvie/
 
 | Name   | Role                         | Responsibilities |
 |--------|------------------------------|------------------|
-| Elif   | AI Engineer                  | Model training, inference, explainability, retraining |
+| Berkay | Backend & DevOps Engineer   | API, authentication, infrastructure, CI/CD |
+| Andaç  | Database & Data Engineer    | Schema design, data pipelines, feature tables |
+| Öykü   | Mobile Frontend Developer  | UI/UX design, user flows |
+| Can    | iOS Integration Developer  | Swif
+↓
+[PostgreSQL + Redis]
+
+
+---
+
+
+## 🗂 Repository Structure
+''' bash
+nuvie/
+├── ai/                        # 🤖 AI & Machine Learning Layer
+│   ├── data/                  # Raw & processed datasets
+│   ├── models/                # Recommendation algorithm implementations
+│   ├── training/              # Model training pipelines
+│   ├── evaluation/            # Offline evaluation metrics
+│   ├── serving/               # AI API service (FastAPI)
+│   └── explanations/          # Explainable AI logic
+│
+├── backend/                   # ⚙️ Backend API & Business Logic
+│   ├── app/                   # FastAPI route definitions
+│   ├── models/                # ORM models
+│   ├── db/                    # Database connection & migrations
+│   ├── schemas/               # Pydantic schemas
+│   └── Dockerfile             # Backend container
+│
+├── ios/                       # 📱 Native iOS App (Swift)
+│   └── NuvieApp/
+│       ├── Views/             # UI screens
+│       ├── ViewModels/        # MVVM logic
+│       ├── Network/           # API & networking layer
+│       ├── Models/            # Data models
+│       └── Assets/            # Images, icons, colors
+│
+├── infra/                     # 🚀 DevOps & Deployment
+│   ├── docker-compose.yml    # Local development orchestration
+│   ├── github-actions.yml    # CI/CD pipeline
+│   └── env.example           # Environment variables template
+│
+└── README.md                  # Project documentation
+'''
+
+---
+
+📐 Product & Engineering Planning (Notion)
+All product decisions, AI phases, backend contracts, and task ownership are tracked in Notion.
+👉 NUVIE Project Workspace (Notion)
+https://www.notion.so/NUVIE-2c4a799111d080a3b839d8771eb64431?source=copy_link
+Tracked in Notion:
+
+
+
+---
+
+## 👥 Team & Responsibilities
+
+| Name   | Role                         | Responsibilities |
+|--------|------------------------------|------------------|
 | Berkay | Backend & DevOps Engineer   | API, authentication, infrastructure, CI/CD |
 | Andaç  | Database & Data Engineer    | Schema design, data pipelines, feature tables |
 | Öykü   | Mobile Frontend Developer  | UI/UX design, user flows |
 | Can    | iOS Integration Developer  | Swift integration, API connectivity, notifications |
+| Elif   | AI Engineer                  | Model training, inference, explainability, retraining |
+
+---
+
+## 🧩 AI Technology Stack
+
+- Python
+- Scikit-learn
+- PyTorch / TensorFlow
+- Hybrid Recommender (Collaborative + Content + Social)
+- Explainable AI Layer
+- Continuous Retraining Pipelines
+
+**Training Dataset:**
+- MovieLens 1M / 10M
+- TMDb Metadata
+
+---
+
+## 🛠 Backend & DevOps Stack
+
+- FastAPI (Python)
+- PostgreSQL (Neon)
+- Redis (Upstash)
+- Docker
+- GitHub Actions (CI/CD)
+- Sign in with Apple Authentication
+
+---
+
+## 📱 Mobile Stack
+
+- Swift (Native iOS)
+- MVVM Architecture
+- REST API Integration
+- Push Notifications
+- Deep Linking
+t integration, API connectivity, notifications |
+| Elif   | AI Engineer                  | Model training, inference, explainability, retraining |
 
 ---
 
