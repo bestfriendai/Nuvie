@@ -6,6 +6,7 @@ from tmdbv3api import TMDb, Movie, Search
 
 import sys
 
+import os
 
 
 # --- CONFIGURATION ---
