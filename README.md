@@ -25,13 +25,13 @@ friend-aware recommendations** powered by a hybrid AI model.
 
 ## 🧠 System Architecture
 
-[iOS App (Swift)]
-↓
-[Backend API (FastAPI)]
-↓
+       [iOS App (Swift)]
+              ↓
+    [Backend API (FastAPI)]
+              ↓
 [AI Recommendation Service (FastAPI)]
-↓
-[PostgreSQL + Redis]
+              ↓
+      [PostgreSQL + Redis]
 
 
 ---
@@ -58,43 +58,6 @@ https://www.notion.so/NUVIE-2c4a799111d080a3b839d8771eb64431
 | Can    | iOS Integration Developer  | Swift integration, API connectivity, notifications |
 | Elif   | AI Engineer                  | Model training, inference, explainability, retraining |
 
----
-
-## 🧩 AI Technology Stack
-
-- Python
-- Scikit-learn
-- PyTorch / TensorFlow
-- Hybrid Recommender (Collaborative + Content + Social)
-- Explainable AI Layer
-- Continuous Retraining Pipelines
-
-**Training Dataset:**
-- MovieLens 1M / 10M
-- TMDb Metadata
-
----
-
-## 🛠 Backend & DevOps Stack
-
-- FastAPI (Python)
-- PostgreSQL (Neon)
-- Redis (Upstash)
-- Docker
-- GitHub Actions (CI/CD)
-- Sign in with Apple Authentication
-
----
-
-## 📱 Mobile Stack
-
-- Swift (Native iOS)
-- MVVM Architecture
-- REST API Integration
-- Push Notifications
-- Deep Linking
-t integration, API connectivity, notifications |
-| Elif   | AI Engineer                  | Model training, inference, explainability, retraining |
 
 ---
 
@@ -134,7 +97,7 @@ t integration, API connectivity, notifications |
 
 ---
 
-## 📋 Project Management & Task Tracking (Notion)
+# 📋 Project Management & Task Tracking (Notion)
 
 We actively use **Notion** for:
 - Sprint planning
@@ -244,7 +207,7 @@ We actively use **Notion** for:
 > tracking, and model versioning.”
 ---
 
-## ✅ How to Run Locally (Development)
+# ✅ How to Run Locally (Development)
 
 ```bash
 git clone https://github.com/your-username/nuvie.git
@@ -292,18 +255,18 @@ python -m pip install torch torchvision torchaudio --index-url https://download.
 python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 
-Notes:
+##Notes:
 - If you have a GPU and need CUDA support, pick the appropriate wheel (the selector on the PyTorch site helps).
 - TensorFlow is included in `requirements-ml.txt` pinned to a safe minor range; install with the same `pip` command above.
 
-📊 Evaluation Metrics
+##📊 Evaluation Metrics
 RMSE
 MAE
 Recall@K
 NDCG@K
 Friend-Aware Engagement Rate
 
-📜 License
+##📜 License
 This project is developed for academic and educational purposes.
 All rights reserved by Team Nuvie.
 
