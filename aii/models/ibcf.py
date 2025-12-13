@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -9,9 +10,10 @@ import pandas as pd
 
 @dataclass
 class ModelConfig:
-    ratings_csv: str = "ai/data/processed/ratings.csv"
-    movies_csv: str = "ai/data/processed/movies.csv"
-    popular_csv: str = "ai/data/processed/popular_movies.csv"
+    processed_dir: str = "aii/data/processed"
+    ratings_csv: Optional[str] = None
+    movies_csv: Optional[str] = None
+    popular_csv: Optional[str] = None
 
     min_user_history: int = 5
     max_k: int = 50
@@ -19,6 +21,15 @@ class ModelConfig:
     # similarity build controls
     min_common_raters: int = 2
     topk_sim_per_item: int = 200
+
+    def __post_init__(self) -> None:
+        # derive CSV paths from processed_dir when not explicitly provided
+        if not self.ratings_csv:
+            self.ratings_csv = os.path.join(self.processed_dir, "ratings.csv")
+        if not self.movies_csv:
+            self.movies_csv = os.path.join(self.processed_dir, "movies.csv")
+        if not self.popular_csv:
+            self.popular_csv = os.path.join(self.processed_dir, "popular_movies.csv")
 
 
 class IBCFRecommender:
