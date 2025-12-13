@@ -35,104 +35,16 @@ friend-aware recommendations** powered by a hybrid AI model.
 
 
 ---
+## 📐 Product & Engineering Planning (Notion)
 
+All product decisions, AI phases, backend contracts, and task ownership are tracked in Notion
+and reflected in this GitHub repository.
 
-## 🗂 Repository Structure
+🔗 **GitHub Repository**  
+https://github.com/kanikeliff/Nuvie/tree/main
 
-nuvie/
-├── ai/                        # 🤖 AI & Machine Learning Layer
-│   ├── data/                  # Raw & processed datasets
-│   ├── models/                # Recommendation algorithm implementations
-│   ├── training/              # Model training pipelines
-│   ├── evaluation/            # Offline evaluation metrics
-│   ├── serving/               # AI API service (FastAPI)
-│   └── explanations/          # Explainable AI logic
-│
-├── backend/                   # ⚙️ Backend API & Business Logic
-│   ├── app/                   # FastAPI route definitions
-│   ├── models/                # ORM models
-│   ├── db/                    # Database connection & migrations
-│   ├── schemas/               # Pydantic schemas
-│   └── Dockerfile             # Backend container
-│
-├── ios/                       # 📱 Native iOS App (Swift)
-│   └── NuvieApp/
-│       ├── Views/             # UI screens
-│       ├── ViewModels/        # MVVM logic
-│       ├── Network/           # API & networking layer
-│       ├── Models/            # Data models
-│       └── Assets/            # Images, icons, colors
-│
-├── infra/                     # 🚀 DevOps & Deployment
-│   ├── docker-compose.yml    # Local development orchestration
-│   ├── github-actions.yml    # CI/CD pipeline
-│   └── env.example           # Environment variables template
-│
-└── README.md                  # Project documentation
-
-
-
-
----
-
-## 👥 Team & Responsibilities
-
-| Name   | Role                         | Responsibilities |
-|--------|------------------------------|------------------|
-| Berkay | Backend & DevOps Engineer   | API, authentication, infrastructure, CI/CD |
-| Andaç  | Database & Data Engineer    | Schema design, data pipelines, feature tables |
-| Öykü   | Mobile Frontend Developer  | UI/UX design, user flows |
-| Can    | iOS Integration Developer  | Swif
-↓
-[PostgreSQL + Redis]
-
-
----
-
-
-## 🗂 Repository Structure
-''' bash
-nuvie/
-├── ai/                        # 🤖 AI & Machine Learning Layer
-│   ├── data/                  # Raw & processed datasets
-│   ├── models/                # Recommendation algorithm implementations
-│   ├── training/              # Model training pipelines
-│   ├── evaluation/            # Offline evaluation metrics
-│   ├── serving/               # AI API service (FastAPI)
-│   └── explanations/          # Explainable AI logic
-│
-├── backend/                   # ⚙️ Backend API & Business Logic
-│   ├── app/                   # FastAPI route definitions
-│   ├── models/                # ORM models
-│   ├── db/                    # Database connection & migrations
-│   ├── schemas/               # Pydantic schemas
-│   └── Dockerfile             # Backend container
-│
-├── ios/                       # 📱 Native iOS App (Swift)
-│   └── NuvieApp/
-│       ├── Views/             # UI screens
-│       ├── ViewModels/        # MVVM logic
-│       ├── Network/           # API & networking layer
-│       ├── Models/            # Data models
-│       └── Assets/            # Images, icons, colors
-│
-├── infra/                     # 🚀 DevOps & Deployment
-│   ├── docker-compose.yml    # Local development orchestration
-│   ├── github-actions.yml    # CI/CD pipeline
-│   └── env.example           # Environment variables template
-│
-└── README.md                  # Project documentation
-'''
-
----
-
-📐 Product & Engineering Planning (Notion)
-All product decisions, AI phases, backend contracts, and task ownership are tracked in Notion.
-👉 NUVIE Project Workspace (Notion)
-https://www.notion.so/NUVIE-2c4a799111d080a3b839d8771eb64431?source=copy_link
-Tracked in Notion:
-
-
+🔗 **NUVIE Project Workspace (Notion)**  
+https://www.notion.so/NUVIE-2c4a799111d080a3b839d8771eb64431
 
 ---
 
@@ -232,30 +144,104 @@ We actively use **Notion** for:
 
 ---
 
-## 🔄 Task-Based Development Roadmap
+## 🧭 Project Phases & Milestones
 
 ### Phase 1 — Foundation
-- Repository setup
-- Database schema
-- API contracts
+📌 **Objective:** Define the full technical foundation before implementation.
 
-### Phase 2 — Data & Baseline
-- MovieLens preprocessing
-- IBCF baseline recommender
-- Mock recommendation endpoints
+**Completion Checklist**
+- [ ] All `docs/` files written  
+- [ ] All team members contributed  
+- [ ] API contracts approved by AI + iOS  
+- [ ] Database schema approved by Backend + AI  
+- [ ] README updated  
+- [ ] Everything committed to GitHub  
+- [ ] Phase tag created: `v0.1-foundation`  
 
-### Phase 3 — Full Integration
-- iOS → Backend → AI data flow
-- Live recommendation feed
+**Final Statement (for Advisor)**  
+> “In Phase 1, the NUVIE team completed the full technical foundation of the system by
+> documenting the architecture, database schema, API contracts, AI pipeline, and mobile
+> application structure. All components were aligned across teams before implementation.”
 
-### Phase 4 — Social AI
-- Friend-aware reranking
-- Social explanations
+---
+
+### Phase 2 — Baseline Intelligence
+📌 **Objective:** Build and validate the first working AI recommender.
+
+**Completion Checklist**
+- [ ] MovieLens dataset cleaned and loaded  
+- [ ] Feature tables created  
+- [ ] IBCF baseline implemented  
+- [ ] Offline metrics computed  
+- [ ] Mock AI recommendation API running  
+- [ ] Backend `/feed` endpoint connected  
+- [ ] iOS feed displays mock recommendations  
+- [ ] Phase 2 documentation committed  
+- [ ] Phase tag created: `v0.2-baseline`  
+
+**Final Statement (for Advisor)**  
+> “In Phase 2, the NUVIE team completed full dataset preparation, implemented a baseline
+> Item-Based Collaborative Filtering recommender, evaluated it using offline metrics,
+> and connected a mock AI recommendation service to both the backend and iOS client.”
+
+---
+
+### Phase 3 — End-to-End Integration
+📌 **Objective:** Deliver a fully working system across all layers.
+
+**Completion Checklist**
+- [ ] Real `/recommend` endpoint running  
+- [ ] Backend successfully calls AI service  
+- [ ] User ratings stored in database  
+- [ ] New ratings influence recommendations  
+- [ ] iOS app displays real recommendations  
+- [ ] “Why recommended” explanations visible  
+- [ ] Full system runs with Docker  
+- [ ] End-to-end demo recorded  
+- [ ] Phase tag created: `v0.3-integration`  
+
+**Final Statement (for Advisor)**  
+> “In Phase 3, the NUVIE team successfully integrated the iOS client, backend API,
+> AI recommendation service, and database into a fully working end-to-end system.
+> Users can now rate movies and instantly receive real, explainable AI recommendations.”
+
+---
+
+### Phase 4 — Social Intelligence
+📌 **Objective:** Introduce friend-based and social recommendation signals.
+
+**Completion Checklist**
+- [ ] Friend-based boosting implemented in AI  
+- [ ] Social reasons appear in recommendations  
+- [ ] Friends can be added and accepted  
+- [ ] Friend ratings influence feed ranking  
+- [ ] iOS shows social badges  
+- [ ] Privacy rules applied  
+- [ ] Phase tag created: `v0.4-social`  
+
+**Final Statement (for Advisor)**  
+> “In Phase 4, the NUVIE team integrated social intelligence into the recommendation system
+> by incorporating friend activity, social ranking signals, and friend-based explanations
+> into both the AI model and the iOS user interface.”
+
+---
 
 ### Phase 5 — Continuous Learning
-- Feedback collection
-- Automatic model retraining
+📌 **Objective:** Transform NUVIE into a self-improving AI system.
 
+**Completion Checklist**
+- [ ] User feedback collected  
+- [ ] Feedback stored in database  
+- [ ] Automatic retraining pipeline running  
+- [ ] New model versions created  
+- [ ] Old models can be restored  
+- [ ] Updated recommendations appear in iOS  
+- [ ] Phase tag created: `v1.0-continuous-ai`  
+
+**Final Statement (for Advisor)**  
+> “In Phase 5, the NUVIE platform was transformed into a continuously learning AI system
+> by introducing user feedback collection, automatic model retraining, performance
+> tracking, and model versioning.”
 ---
 
 ## ✅ How to Run Locally (Development)
