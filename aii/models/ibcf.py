@@ -81,9 +81,10 @@ class IBCFRecommender:
 
         df = self.ratings.copy()
 
-        # mean-center per user
+        # mean-center per user (vectorized)
         user_mean = df.groupby("user_id")["rating"].mean()
-        df["r_c"] = df.apply(lambda x: float(x.rating) - float(user_mean.loc[x.user_id]), axis=1)
+        df = df.copy()
+        df["r_c"] = df["rating"] - df["user_id"].map(user_mean).astype(float)
 
         # Build norms per item and dot products per item-pair using user groups
         norm: Dict[int, float] = {}
