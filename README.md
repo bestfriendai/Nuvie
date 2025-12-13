@@ -281,18 +281,18 @@ python -m pip install torch torchvision torchaudio --index-url https://download.
 python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 
-##Notes:
+Notes:
 - If you have a GPU and need CUDA support, pick the appropriate wheel (the selector on the PyTorch site helps).
 - TensorFlow is included in `requirements-ml.txt` pinned to a safe minor range; install with the same `pip` command above.
 
-##📊 Evaluation Metrics
+📊 Evaluation Metrics
 RMSE
 MAE
 Recall@K
 NDCG@K
 Friend-Aware Engagement Rate
 
-##📜 License
+📜 License
 This project is developed for academic and educational purposes.
 All rights reserved by Team Nuvie.
 
