@@ -53,9 +53,19 @@ class IBCFRecommender:
         self.movie_title: Dict[int, str] = {}
 
     def load(self) -> None:
-        self.ratings = pd.read_csv(self.cfg.ratings_csv)
-        self.movies = pd.read_csv(self.cfg.movies_csv)
-        self.popular = pd.read_csv(self.cfg.popular_csv)
+        # load CSVs with clear validation and helpful error messages
+        try:
+            self.ratings = pd.read_csv(self.cfg.ratings_csv)
+        except Exception as e:  # FileNotFoundError, pd.errors.EmptyDataError, etc.
+            raise RuntimeError(f"Failed to read ratings CSV at '{self.cfg.ratings_csv}': {e}")
+        try:
+            self.movies = pd.read_csv(self.cfg.movies_csv)
+        except Exception as e:
+            raise RuntimeError(f"Failed to read movies CSV at '{self.cfg.movies_csv}': {e}")
+        try:
+            self.popular = pd.read_csv(self.cfg.popular_csv)
+        except Exception as e:
+            raise RuntimeError(f"Failed to read popular CSV at '{self.cfg.popular_csv}': {e}")
 
         self.movie_title = dict(
             zip(self.movies["movie_id"].astype(int), self.movies["title"].astype(str))
