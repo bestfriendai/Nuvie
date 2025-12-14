@@ -1,0 +1,31 @@
+{
+  "recommendations": [
+    {
+      "movie_id": 101,
+      "title": "Inception",
+      "poster_url": "https://image.tmdb.org/t/p/w500/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg",
+      "genres": ["Action", "Sci-Fi"],
+      "release_date": "2010-07-16T00:00:00Z",
+      "rating": 8.8,
+      "ai_score": 94,
+      "social_score": 89,
+      "user_rating": 5,
+      "explanation": {
+        "primary_reason": "Because you liked mind-bending sci-fi thrillers",
+        "confidence": 0.91,
+        "factors": [
+          {
+            "type": "genre_match",
+            "weight": 0.6,
+            "value": 0.9,
+            "payload": { "genre": "Sci-Fi" },
+            "description": "Strong genre overlap with your favorites"
+          }
+        ]
+      },
+      "friend_ratings": null
+    }
+  ],
+  "last_updated": "2025-12-14T10:00:00Z",
+  "total_count": 1
+}

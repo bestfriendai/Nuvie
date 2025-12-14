@@ -1,0 +1,19 @@
+{
+  "recommendations": [
+    {
+      "movie_id": 201,
+      "title": "Dune",
+      "poster_url": "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg",
+      "genres": ["Adventure", "Sci-Fi"],
+      "release_date": "2021-10-22T00:00:00Z",
+      "rating": 8.2,
+      "ai_score": 88,
+      "social_score": 76,
+      "user_rating": null,
+      "explanation": null,
+      "friend_ratings": null
+    }
+  ],
+  "last_updated": "2025-12-14T10:00:00Z",
+  "total_count": 1
+}
