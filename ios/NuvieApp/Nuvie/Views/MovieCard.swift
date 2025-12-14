@@ -9,13 +9,15 @@ import SwiftUI
 
 struct MovieCard: View {
     let movie: Recommendation
-      let compact: Bool
-      @State private var isHovered = false
-      
-      init(movie: Recommendation, compact: Bool = false) {
-          self.movie = movie
-          self.compact = compact
-      }
+    let compact: Bool
+    @State private var isHovered = false
+    @State private var showExplanationSheet = false
+    @State private var showRatingView = false
+    
+    init(movie: Recommendation, compact: Bool = false) {
+        self.movie = movie
+        self.compact = compact
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
                     // poster image
@@ -42,7 +44,7 @@ struct MovieCard: View {
                         
                         // overlay with badges. shown on hover/press
                         if isHovered {
-                            OverlayView(movie: movie)
+                            OverlayView(movie: movie, showExplanationSheet: $showExplanationSheet)
                                 .transition(.opacity)
                         }
                         
@@ -54,7 +56,7 @@ struct MovieCard: View {
                         
                         // quick recommend button. top left. shown on hover
                         if isHovered {
-                            QuickRecommendButton()
+                            QuickRecommendButton(showRating: $showRatingView)
                                 .padding(8)
                                 .transition(.opacity.combined(with: .scale))
                         }
@@ -102,6 +104,25 @@ struct MovieCard: View {
                 .onTapGesture {
                     // navigate to movie detail. todo: implement
                 }
+                .sheet(isPresented: $showExplanationSheet) {
+                    if let explanation = movie.explanation {
+                        ExplanationSheet(
+                            explanation: explanation,
+                            movieTitle: movie.title,
+                            isPresented: $showExplanationSheet
+                        )
+                    }
+                }
+                .sheet(isPresented: $showRatingView) {
+                    RatingView(
+                        movie: movie,
+                        isPresented: $showRatingView,
+                        onRatingSubmitted: {
+                            // refresh feed after rating
+                            NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                        }
+                    )
+                }
             }
         }
 
@@ -120,6 +141,7 @@ struct MovieCard: View {
 
         struct OverlayView: View {
             let movie: Recommendation
+            @Binding var showExplanationSheet: Bool
             
             var body: some View {
                 LinearGradient(
@@ -141,6 +163,10 @@ struct MovieCard: View {
                         }
                         if let socialScore = movie.social_score {
                             SocialScoreBadge(score: socialScore)
+                        }
+                        // explanation badge. phase 3
+                        if let explanation = movie.explanation {
+                            ExplanationBadge(explanation: explanation, showSheet: $showExplanationSheet)
                         }
                     }
                     .padding(12)
@@ -221,9 +247,11 @@ struct MovieCard: View {
         }
 
         struct QuickRecommendButton: View {
+            @Binding var showRating: Bool
+            
             var body: some View {
                 Button(action: {
-                    // handle recommend action
+                    showRating = true
                 }) {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 12))

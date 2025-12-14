@@ -17,6 +17,18 @@ final class FeedViewModel: ObservableObject {
 
     @Published var isLoading: Bool = true
     @Published var showError: Bool = false
+    @Published var error: AppError?
+    
+    init() {
+        // listen for refresh notifications
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("RefreshFeed"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.loadFeed()
+        }
+    }
 
     func loadFeed() {
         isLoading = true
@@ -33,9 +45,22 @@ final class FeedViewModel: ObservableObject {
                 self.activities = activity.activities
 
                 self.isLoading = false
+                self.showError = false
+                self.error = nil
             } catch {
                 self.isLoading = false
                 self.showError = true
+                // map error to app error
+                if let apiError = error as? APIError {
+                    switch apiError {
+                    case .fileNotFound:
+                        self.error = .networkError
+                    case .decoding:
+                        self.error = .internalError
+                    }
+                } else {
+                    self.error = .networkError
+                }
             }
         }
     }

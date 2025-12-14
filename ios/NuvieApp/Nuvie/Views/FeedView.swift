@@ -38,7 +38,11 @@ struct FeedView: View {
             if viewModel.isLoading {
                         FeedSkeletonView()
             } else if viewModel.showError {
-                ErrorStateView(onRetry: viewModel.loadFeed)
+                if let error = viewModel.error {
+                    EnhancedErrorView(error: error, onRetry: viewModel.loadFeed)
+                } else {
+                    ErrorStateView(onRetry: viewModel.loadFeed)
+                }
                     } else {
                         ScrollView {
                             VStack(spacing: 32) {
