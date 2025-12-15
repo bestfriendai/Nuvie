@@ -1,3 +1,4 @@
+# aii/models/ibcf.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from aii.explanations.reason_generator import ReasonInput, generate_reason
+
 
 @dataclass
 class ModelConfig:
@@ -14,6 +17,9 @@ class ModelConfig:
     ratings_csv: Optional[str] = None
     movies_csv: Optional[str] = None
     popular_csv: Optional[str] = None
+
+    # similarity cache (so FastAPI startup doesn't hang every time)
+    sims_cache: Optional[str] = None
 
     min_user_history: int = 5
     max_k: int = 50
@@ -23,13 +29,14 @@ class ModelConfig:
     topk_sim_per_item: int = 200
 
     def __post_init__(self) -> None:
-        # derive CSV paths from processed_dir when not explicitly provided
         if not self.ratings_csv:
             self.ratings_csv = os.path.join(self.processed_dir, "ratings.csv")
         if not self.movies_csv:
             self.movies_csv = os.path.join(self.processed_dir, "movies.csv")
         if not self.popular_csv:
             self.popular_csv = os.path.join(self.processed_dir, "popular_movies.csv")
+        if not self.sims_cache:
+            self.sims_cache = os.path.join(self.processed_dir, "item_sims.npz")
 
 
 class IBCFRecommender:
@@ -48,20 +55,23 @@ class IBCFRecommender:
         self.popular: Optional[pd.DataFrame] = None
 
         self.user_hist: Dict[int, List[Tuple[int, float]]] = {}
-        self.item_sims: Dict[int, List[Tuple[int, float, int]]] = {}  # item -> [(other, sim, common)]
+        # item -> [(other, sim, common)]
+        self.item_sims: Dict[int, List[Tuple[int, float, int]]] = {}
 
         self.movie_title: Dict[int, str] = {}
+        self.movie_genres: Dict[int, set[str]] = {}
 
     def load(self) -> None:
-        # load CSVs with clear validation and helpful error messages
         try:
             self.ratings = pd.read_csv(self.cfg.ratings_csv)
-        except Exception as e:  # FileNotFoundError, pd.errors.EmptyDataError, etc.
+        except Exception as e:
             raise RuntimeError(f"Failed to read ratings CSV at '{self.cfg.ratings_csv}': {e}")
+
         try:
             self.movies = pd.read_csv(self.cfg.movies_csv)
         except Exception as e:
             raise RuntimeError(f"Failed to read movies CSV at '{self.cfg.movies_csv}': {e}")
+
         try:
             self.popular = pd.read_csv(self.cfg.popular_csv)
         except Exception as e:
@@ -71,9 +81,47 @@ class IBCFRecommender:
             zip(self.movies["movie_id"].astype(int), self.movies["title"].astype(str))
         )
 
+        def _parse_genres(s: str) -> set[str]:
+            if not isinstance(s, str) or not s:
+                return set()
+            return {g.strip().lower() for g in s.split("|") if g.strip()}
+
+        if "genres" in self.movies.columns:
+            self.movie_genres = dict(
+                zip(
+                    self.movies["movie_id"].astype(int),
+                    self.movies["genres"].astype(str).map(_parse_genres),
+                )
+            )
+        else:
+            self.movie_genres = {}
+
         self.user_hist.clear()
         for r in self.ratings.itertuples(index=False):
             self.user_hist.setdefault(int(r.user_id), []).append((int(r.movie_id), float(r.rating)))
+
+    def load_or_fit(self) -> None:
+        """
+        Load cached similarities if present; otherwise fit and cache them.
+        This prevents FastAPI startup from hanging every run.
+        """
+        try:
+            if self.cfg.sims_cache and os.path.exists(self.cfg.sims_cache):
+                data = np.load(self.cfg.sims_cache, allow_pickle=True)
+                self.item_sims = data["item_sims"].item()
+                return
+        except Exception:
+            # fall back to recompute
+            pass
+
+        self.fit()
+
+        try:
+            os.makedirs(os.path.dirname(self.cfg.sims_cache), exist_ok=True)
+            np.savez_compressed(self.cfg.sims_cache, item_sims=self.item_sims)
+        except Exception:
+            # caching is best-effort
+            pass
 
     def fit(self) -> None:
         if self.ratings is None:
@@ -81,22 +129,18 @@ class IBCFRecommender:
 
         df = self.ratings.copy()
 
-        # mean-center per user (vectorized)
         user_mean = df.groupby("user_id")["rating"].mean()
-        df = df.copy()
         df["r_c"] = df["rating"] - df["user_id"].map(user_mean).astype(float)
 
-        # Build norms per item and dot products per item-pair using user groups
         norm: Dict[int, float] = {}
         dot: Dict[Tuple[int, int], float] = {}
         common: Dict[Tuple[int, int], int] = {}
 
-        for uid, g in df.groupby("user_id"):
+        for _uid, g in df.groupby("user_id"):
             items = list(zip(g["movie_id"].astype(int).tolist(), g["r_c"].astype(float).tolist()))
-            # norms
             for i, rci in items:
                 norm[i] = norm.get(i, 0.0) + rci * rci
-            # pairwise dot + common
+
             n = len(items)
             for a in range(n):
                 i, rci = items[a]
@@ -108,7 +152,6 @@ class IBCFRecommender:
                     dot[key] = dot.get(key, 0.0) + (rci * rcj)
                     common[key] = common.get(key, 0) + 1
 
-        # build per-item sim list (truncate)
         sims: Dict[int, List[Tuple[int, float, int]]] = {}
         for (i, j), d in dot.items():
             c = common.get((i, j), 0)
@@ -134,33 +177,35 @@ class IBCFRecommender:
         limit: int = 20,
         offset: int = 0,
         exclude_movie_ids: Optional[List[int]] = None,
-        use_social: bool = False,  # reserved for later
+        use_social: bool = False,
         seed_movie_ids: Optional[List[int]] = None,
     ) -> List[Dict]:
         if limit > self.cfg.max_k:
             limit = self.cfg.max_k
 
         exclude = set(exclude_movie_ids or [])
-        hist = self.user_hist.get(int(user_id), [])
+        hist = list(self.user_hist.get(int(user_id), []))  # copy
         seen = {mid for mid, _ in hist}
 
-        # Optional: treat seed_movie_ids as additional "history" (useful for demo)
-        if seed_movie_ids:
-            for mid in seed_movie_ids:
-                if mid not in seen:
-                    hist.append((int(mid), 4.0))  # neutral-ish positive
-                    seen.add(int(mid))
+        seed_movie_ids = [int(m) for m in (seed_movie_ids or []) if int(m) not in exclude]
+        effective_seen = set(seen) | set(seed_movie_ids)
 
-        # Cold start
-        if len(hist) < self.cfg.min_user_history:
+        # If no/low history but you gave seeds, do seed-only recs instead of popular.
+        if len(effective_seen) < self.cfg.min_user_history:
+            if seed_movie_ids:
+                return self._seed_only_recommend(seed_movie_ids, limit=limit, offset=offset, exclude=exclude, use_social=use_social)
             return self._popular_fallback(limit=limit, offset=offset, exclude=exclude)
 
+        # Add seeds to history as "soft likes"
+        for mid in seed_movie_ids:
+            if mid not in seen:
+                hist.append((mid, 4.0))
+                seen.add(mid)
+
         # Candidate scoring
-        # score(i) accumulates sim(i,j) * rating(u,j)
         num: Dict[int, float] = {}
         den: Dict[int, float] = {}
-        # keep best contributing seeds for explanations
-        best_seed: Dict[int, Tuple[int, float]] = {}  # item -> (seed_movie, contrib)
+        best_seed: Dict[int, Tuple[int, float]] = {}
 
         for seed_mid, seed_r in hist:
             for other_mid, sim, _common in self.item_sims.get(seed_mid, []):
@@ -177,26 +222,37 @@ class IBCFRecommender:
         scored = []
         for mid, n in num.items():
             d = den.get(mid, 1e-9)
-            pred = n / d
-            scored.append((mid, float(pred)))
+            scored.append((mid, float(n / d)))
 
         scored.sort(key=lambda x: x[1], reverse=True)
         window = scored[offset : offset + limit]
 
-        # Normalize to [0,1] score (simple min-max on window, stable enough for mock)
         if not window:
             return self._popular_fallback(limit=limit, offset=offset, exclude=exclude)
 
         vals = [s for _, s in window]
         vmin, vmax = min(vals), max(vals)
+
         def to01(x: float) -> float:
             if vmax - vmin < 1e-9:
                 return 0.5
             return (x - vmin) / (vmax - vmin)
 
-        items = []
+        items: List[Dict] = []
         for rank_idx, (mid, pred) in enumerate(window, start=1):
             seed_mid, _ = best_seed.get(mid, (None, 0.0))
+
+            reason = generate_reason(
+                ReasonInput(
+                    user_id=int(user_id),
+                    rec_movie_id=int(mid),
+                    seed_movie_id=int(seed_mid) if seed_mid else None,
+                    movie_title=self.movie_title,
+                    movie_genres=self.movie_genres,
+                    use_social=use_social,
+                    friend_ids=None,
+                )
+            )
 
             items.append(
                 {
@@ -204,109 +260,153 @@ class IBCFRecommender:
                     "score": float(to01(pred)),
                     "rank": int(offset + rank_idx),
                     "explanation": {
-                        "primary_reason": "because_you_rated",
-                        "confidence": 0.75,
-                        "factors": [
-                            {
-                                "type": "because_you_rated",
-                                "weight": 1.0,
-                                "value": 1,
-                                "payload": {"seed_movie_ids": [int(seed_mid)] if seed_mid else []},
-                                "description": "Recommended based on similar movies you rated",
-                            }
-                        ],
+                        "primary_reason": reason["primary_reason"],
+                        "confidence": float(reason["confidence"]),
+                        "text": reason["text"],
+                        "factors": reason["factors"],
                     },
                 }
             )
         return items
 
-    def explain(self, user_id: int, movie_id: int) -> Dict:
+    def explain(self, user_id: int, movie_id: int, use_social: bool = False) -> Dict:
         hist = self.user_hist.get(int(user_id), [])
-        seen = {mid for mid, _ in hist}
+        exclude = set()
+        seed_mid = None
 
-        if len(hist) < self.cfg.min_user_history:
-            return {
-                "movie_id": int(movie_id),
-                "ai_score": 50,
-                "explanation": {
-                    "primary_reason": "popular",
-                    "confidence": 0.6,
-                    "factors": [
-                        {
-                            "type": "popular",
-                            "weight": 1.0,
-                            "value": 1,
-                            "payload": {},
-                            "description": "Recommended because it's popular among users",
-                        }
-                    ],
-                },
-                "social_signals": {"friend_ratings_count": 0, "friend_ratings_avg": None, "friend_watch_count": 0},
-            }
-
-        # find strongest similar item from user history
-        best = None  # (seed_mid, sim)
-        for seed_mid, _r in hist:
-            for other_mid, sim, _c in self.item_sims.get(seed_mid, []):
+        # pick strongest similar seed if possible
+        best = None
+        for smid, _r in hist:
+            for other_mid, sim, _c in self.item_sims.get(smid, []):
                 if int(other_mid) == int(movie_id):
                     if best is None or sim > best[1]:
-                        best = (seed_mid, sim)
+                        best = (smid, sim)
+        if best:
+            seed_mid = int(best[0])
 
-        if best is None:
-            primary = "because_you_rated"
-            payload = {"seed_movie_ids": [mid for mid, _ in hist[:2]]}
-            desc = "Recommended based on your rating history"
-            conf = 0.65
-        else:
-            primary = "because_you_rated"
-            payload = {"seed_movie_ids": [int(best[0])]}
-            desc = "Recommended because you rated a similar movie"
-            conf = 0.78
+        reason = generate_reason(
+            ReasonInput(
+                user_id=int(user_id),
+                rec_movie_id=int(movie_id),
+                seed_movie_id=seed_mid,
+                movie_title=self.movie_title,
+                movie_genres=self.movie_genres,
+                use_social=use_social,
+                friend_ids=None,
+            )
+        )
 
-        # map to ai_score 0-100 (mock)
-        ai_score = int(round(conf * 100))
+        ai_score = int(round(float(reason["confidence"]) * 100))
 
         return {
             "movie_id": int(movie_id),
             "ai_score": ai_score,
             "explanation": {
-                "primary_reason": primary,
-                "confidence": float(conf),
-                "factors": [
-                    {
-                        "type": "because_you_rated",
-                        "weight": 1.0,
-                        "value": 1,
-                        "payload": payload,
-                        "description": desc,
-                    }
-                ],
+                "primary_reason": reason["primary_reason"],
+                "confidence": float(reason["confidence"]),
+                "text": reason["text"],
+                "factors": reason["factors"],
             },
-            "social_signals": {"friend_ratings_count": 0, "friend_ratings_avg": None, "friend_watch_count": 0},
+            "social_signals": {
+                "friend_ratings_count": 0,
+                "friend_ratings_avg": None,
+                "friend_watch_count": 0,
+            },
         }
+
+    def _seed_only_recommend(
+        self,
+        seed_movie_ids: List[int],
+        limit: int,
+        offset: int,
+        exclude: set[int],
+        use_social: bool,
+    ) -> List[Dict]:
+        # Use seeds as pseudo-history and score similar items
+        hist = [(int(mid), 4.0) for mid in seed_movie_ids if int(mid) not in exclude]
+        seen = {mid for mid, _ in hist}
+
+        num: Dict[int, float] = {}
+        den: Dict[int, float] = {}
+        best_seed: Dict[int, Tuple[int, float]] = {}
+
+        for seed_mid, seed_r in hist:
+            for other_mid, sim, _common in self.item_sims.get(seed_mid, []):
+                if other_mid in seen or other_mid in exclude:
+                    continue
+                contrib = sim * seed_r
+                num[other_mid] = num.get(other_mid, 0.0) + contrib
+                den[other_mid] = den.get(other_mid, 0.0) + abs(sim)
+
+                prev = best_seed.get(other_mid)
+                if prev is None or contrib > prev[1]:
+                    best_seed[other_mid] = (seed_mid, contrib)
+
+        scored = [(mid, n / max(den.get(mid, 1e-9), 1e-9)) for mid, n in num.items()]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        window = scored[offset : offset + limit]
+
+        if not window:
+            return self._popular_fallback(limit=limit, offset=offset, exclude=exclude)
+
+        vals = [s for _, s in window]
+        vmin, vmax = min(vals), max(vals)
+
+        def to01(x: float) -> float:
+            if vmax - vmin < 1e-9:
+                return 0.5
+            return (x - vmin) / (vmax - vmin)
+
+        out: List[Dict] = []
+        for idx, (mid, pred) in enumerate(window, start=1):
+            seed_mid, _ = best_seed.get(mid, (None, 0.0))
+            reason = generate_reason(
+                ReasonInput(
+                    user_id=-1,
+                    rec_movie_id=int(mid),
+                    seed_movie_id=int(seed_mid) if seed_mid else None,
+                    movie_title=self.movie_title,
+                    movie_genres=self.movie_genres,
+                    use_social=use_social,
+                    friend_ids=None,
+                )
+            )
+            out.append(
+                {
+                    "movie_id": int(mid),
+                    "score": float(to01(pred)),
+                    "rank": int(offset + idx),
+                    "explanation": {
+                        "primary_reason": reason["primary_reason"],
+                        "confidence": float(reason["confidence"]),
+                        "text": reason["text"],
+                        "factors": reason["factors"],
+                    },
+                }
+            )
+        return out
 
     def _popular_fallback(self, limit: int, offset: int, exclude: set[int]) -> List[Dict]:
         assert self.popular is not None
         rows = self.popular[~self.popular["movie_id"].isin(list(exclude))].iloc[offset : offset + limit]
         items = []
         for idx, r in enumerate(rows.itertuples(index=False), start=1):
+            reason = {
+                "primary_reason": "popular",
+                "confidence": 0.60,
+                "text": "Recommended because it's popular among users.",
+                "factors": [{"type": "popular", "weight": 1.0, "payload": {}}],
+            }
             items.append(
                 {
                     "movie_id": int(r.movie_id),
-                    "score": 0.5,  # neutral for cold-start
+                    "score": 0.5,
                     "rank": int(offset + idx),
                     "explanation": {
-                        "primary_reason": "popular",
-                        "confidence": 0.6,
-                        "factors": [
-                            {
-                                "type": "popular",
-                                "weight": 1.0,
-                                "value": int(getattr(r, "rating_count", 1)),
-                                "payload": {},
-                                "description": "Recommended because it's popular",
-                            }
-                        ],
+                        "primary_reason": reason["primary_reason"],
+                        "confidence": float(reason["confidence"]),
+                        "text": reason["text"],
+                        "factors": reason["factors"],
                     },
                 }
             )
