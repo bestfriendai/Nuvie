@@ -1,66 +1,54 @@
-import os
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import text
 
-from .auth import get_current_user
 from backend.session import get_db
+from backend.auth import get_current_user
 
-router = APIRouter(prefix="/feed", tags=["Feed"])
-
-
-def safe_year(release_date):
-    # I extract the year safely so the API never crashes on missing dates
-    if not release_date:
-        return None
-    try:
-        return int(str(release_date)[:4])
-    except Exception:
-        return None
-
+# I create a router for feed-related endpoints
+router = APIRouter(
+    prefix="/feed",
+    tags=["Feed"]
+)
 
 @router.get("/home")
 def home_feed(
     limit: int = 20,
-    user=Depends(get_current_user),
+    offset: int = 0,
+    user = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    This endpoint returns a feed of movie recommendations for the logged-in user.
+    # I extract the user id from the authenticated user
+    user_id = int(user["id"])
 
-    Phase 2 note:
-    - I only check that a Bearer token exists (auth stub).
-    - I read movies directly from DB (Neon) to give iOS real posters/overview.
-    """
-    user_id = user["id"]  # I keep this for future AI personalization
-
-    # I pull real movie metadata from DB so the mobile feed can render posters and text
+    # I query movies from the database
+    # because Phase 2 only requires a simple feed (no personalization yet)
     rows = db.execute(
         text("""
             SELECT movie_id, title, poster_url, overview, release_date
             FROM movies
             ORDER BY movie_id
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
         """),
-        {"limit": limit},
+        {"limit": limit, "offset": offset}
     ).mappings().all()
 
+    # I transform database rows into a JSON-friendly structure
+    items = []
+    for row in rows:
+        items.append({
+            "movie_id": row["movie_id"],
+            "title": row["title"],
+            "poster_url": row["poster_url"],
+            "overview": row["overview"],
+            "release_date": row["release_date"],
+            # I keep this empty for now and will fill it in Phase 3
+            "reason_chips": []
+        })
+
+    # I return the feed data along with pagination info
     return {
-        "items": [
-            {
-                "type": "recommendation",
-                "created_at": "2025-12-13T10:00:00Z",
-                "movie": {
-                    "id": r["movie_id"],
-                    "title": r["title"],
-                    "year": safe_year(r["release_date"]),
-                    "poster_url": r["poster_url"],
-                    "overview": r["overview"],
-                    "release_date": r["release_date"],
-                },
-                "score": 0.8,
-                "reason_chips": ["DB fallback (Phase 2)"],
-            }
-            for r in rows
-        ]
+        "user_id": user_id,
+        "items": items,
+        "next_offset": offset + limit
     }
