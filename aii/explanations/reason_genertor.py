@@ -24,7 +24,6 @@ def generate_reason(inp: ReasonInput) -> Dict:
     seed_g = inp.movie_genres.get(inp.seed_movie_id, set()) if inp.seed_movie_id else set()
     overlap = sorted(rec_g & seed_g)
 
-    # Social placeholder (until real friend graph is wired)
     if inp.use_social:
         return {
             "primary_reason": "social",
