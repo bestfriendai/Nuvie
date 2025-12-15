@@ -1,15 +1,12 @@
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
 
-app = FastAPI()
+from .feed import router as feed_router
+from .auth import router as auth_router
 
-# I allow cross-origin requests from all domains (iOS)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Nuvie Backend API")
+
+app.include_router(auth_router)
+app.include_router(feed_router)
 
 @app.get("/health")
 def health():
