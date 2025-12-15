@@ -20,7 +20,7 @@ final class APIClient {
     // MARK: - Tokens
     private var authToken: String? {
         // Keep it simple
-        UserDefaults.standard.string(forKey: "auth_token")
+        TokenStore.shared.load()
     }
 
     private let internalToken = "INTERNAL_AI_TOKEN"
@@ -34,6 +34,9 @@ final class APIClient {
 
         if let token = authToken {
             headers["Authorization"] = "Bearer \(token)"
+        }
+        if let apiKey = UserDefaults.standard.string(forKey: "api_key") {
+            headers["x-api-key"] = apiKey
         }
 
         return headers
@@ -88,6 +91,60 @@ extension APIClient {
         case .prod:
             return "https://api.nuvie.com"
         }
+    }
+}
+extension APIClient {
+
+    // GET request (live API)
+    func get<T: Decodable>(
+        endpoint: Endpoint,
+        responseType: T.Type
+    ) async throws -> T {
+
+        let url = endpoint.url(baseURL: baseURL)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+
+        defaultHeaders.forEach {
+            request.setValue($0.value, forHTTPHeaderField: $0.key)
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    // POST request (rate movie etc.)
+    func post<T: Decodable, Body: Encodable>(
+        endpoint: Endpoint,
+        body: Body,
+        responseType: T.Type
+    ) async throws -> T {
+
+        let url = endpoint.url(baseURL: baseURL)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(body)
+
+        defaultHeaders.forEach {
+            request.setValue($0.value, forHTTPHeaderField: $0.key)
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(T.self, from: data)
     }
 }
 

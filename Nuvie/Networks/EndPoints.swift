@@ -30,3 +30,9 @@ enum Endpoint {
         }
     }
 }
+extension Endpoint {
+
+    func url(baseURL: String) -> URL {
+        return URL(string: baseURL + path)!
+    }
+}

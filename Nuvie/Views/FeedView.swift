@@ -8,8 +8,8 @@
 import SwiftUI
 
 struct FeedView: View {
-    @StateObject private var viewModel = FeedViewModel()
-        
+    
+        @StateObject private var viewModel = FeedViewModel()
         // grid columns. based on device size
         private var recommendedColumns: [GridItem] {
             [
@@ -30,6 +30,7 @@ struct FeedView: View {
             ]
         }
     var body: some View {
+       
         ZStack {
                     // background
                     Color(hex: "0f172a")
