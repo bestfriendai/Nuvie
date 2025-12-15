@@ -1,20 +1,16 @@
-from fastapi import FastAPI
-from .feed import router as feed_router
+from fastapi.middleware.cors import CORSMiddleware
 
-# I create the FastAPI application instance
-# because this is the entry point of my backend service
-app = FastAPI(
-    title="NUVIE Backend API",
-    description="I use this service to deliver movie data to the iOS app",
-    version="1.0.0"
+app = FastAPI()
+
+# I allow cross-origin requests from all domains (iOS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# I register the feed router
-# so endpoints like /feed/home become accessible
-app.include_router(feed_router)
-
-# I expose a health check endpoint
-# so I can verify that the backend is running correctly
 @app.get("/health")
 def health():
     return {"status": "ok"}
