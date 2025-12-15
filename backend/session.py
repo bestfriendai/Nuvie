@@ -1,6 +1,10 @@
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+# I create a Base class for SQLAlchemy models
+# so all models can inherit from it
+Base = declarative_base()
 
 # I read DATABASE_URL from environment variables
 # because I never want database credentials inside the codebase
