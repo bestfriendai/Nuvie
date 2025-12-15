@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
 from backend.session import get_db
-from backend.auth import get_current_user
+# I import auth from the same folder (backend/app) so Python finds it correctly
+from .auth import get_current_user
 
 # I create a router for feed-related endpoints
 router = APIRouter(
