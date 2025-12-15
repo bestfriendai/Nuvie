@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends
-from jose import jwt
+from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
 import uuid
 import os
 
@@ -11,65 +12,98 @@ from backend.auth import hash_password, verify_password
 # because I want to group login and register logic under /auth
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# I define a reusable HTTP Bearer scheme
+# because JWT tokens are sent via Authorization: Bearer <token>
+security = HTTPBearer()
+
 # I read the JWT secret from environment variables
 # because secrets should never be hard-coded
 JWT_SECRET = os.getenv("JWT_SECRET")
 
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET is not set")
+
 # I define the JWT algorithm explicitly
-# because both encoding and decoding must use the same algorithm
 JWT_ALGO = "HS256"
 
 
 @router.post("/register")
 def register(user_data: dict, db=Depends(get_db)):
     # I check if a user with the same email already exists
-    # because I want to prevent duplicate accounts
     existing_user = db.query(User).filter(User.email == user_data["email"]).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # I hash the user's password before saving it
-    # because storing plain text passwords is a security risk
     hashed_password = hash_password(user_data["password"])
 
-    # I create a new user with a UUID as the primary key
-    # because UUIDs are safer than incremental IDs in distributed systems
+    # I create a new user with a UUID
     new_user = User(
         id=str(uuid.uuid4()),
         email=user_data["email"],
-        password_hash=hashed_password
+        password_hash=hashed_password,
     )
 
-    # I add the new user to the database session
     db.add(new_user)
-
-    # I commit the transaction to persist the user
     db.commit()
 
-    # I return a simple success message
-    # because the client only needs to know the operation succeeded
     return {"message": "User registered successfully"}
 
 
 @router.post("/login")
 def login(user_data: dict, db=Depends(get_db)):
-    # I fetch the user by email from the database
-    # because email is the unique login identifier
+    # I fetch the user by email
     user = db.query(User).filter(User.email == user_data["email"]).first()
 
-    # I verify both user existence and password correctness
-    # because I must reject invalid credentials
+    # I validate credentials
     if not user or not verify_password(user_data["password"], user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # I generate a JWT token with the user ID as the subject
-    # because the token will identify the user in future requests
+    # I generate a JWT token
     token = jwt.encode(
         {"sub": user.id},
         JWT_SECRET,
-        algorithm=JWT_ALGO
+        algorithm=JWT_ALGO,
     )
 
-    # I return the access token to the client
-    # because the client will attach it to Authorization headers
     return {"access_token": token}
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db=Depends(get_db),
+):
+    # I extract the raw token
+    token = credentials.credentials
+
+    try:
+        # I decode the JWT
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        user_id = payload.get("sub")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+
+    # I fetch the user from the database
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # I return a minimal user context
+    return {
+        "id": user.id,
+        "email": user.email,
+    }
