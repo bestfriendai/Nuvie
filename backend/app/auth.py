@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.models.user import User
 from backend.session import get_db
-from backend.auth import hash_password, verify_password
+from .auth_utils import hash_password, verify_password
 
 # I create a router so I can register these endpoints in main.py easily
 router = APIRouter(prefix="/auth", tags=["auth"])
