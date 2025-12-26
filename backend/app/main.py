@@ -5,7 +5,8 @@ IMPROVEMENTS:
 - Added CORS middleware with configurable origins
 - Added security headers middleware
 - Added request ID middleware for tracing
-- Added proper health/ready endpoints
+- Added rate limiting with slowapi
+- Added proper health/ready endpoints with Redis check
 - Added OpenAPI documentation configuration
 - Added logging configuration
 """
@@ -21,9 +22,14 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from .feed import router as feed_router
 from .auth import router as auth_router
+from .cache import cache
+from .circuit_breaker import get_circuit_status
 
 # -----------------------
 # Logging Configuration
@@ -47,6 +53,29 @@ ALLOWED_ORIGINS = os.getenv(
     "http://localhost:3000,http://localhost:8080"
 ).split(",")
 
+# Rate limiting configuration
+RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
+RATE_LIMIT_AUTH = os.getenv("RATE_LIMIT_AUTH", "5/minute")
+
+
+# -----------------------
+# Rate Limiter Setup
+# -----------------------
+def get_client_ip(request: Request) -> str:
+    """Get client IP, considering X-Forwarded-For header."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(
+    key_func=get_client_ip,
+    default_limits=[RATE_LIMIT_DEFAULT],
+    storage_uri=os.getenv("REDIS_URL", "memory://"),
+    strategy="fixed-window",
+)
+
 
 # -----------------------
 # Lifespan Events
@@ -56,7 +85,14 @@ async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     # Startup
     logger.info(f"Starting Nuvie Backend API v{VERSION} in {ENVIRONMENT} mode")
+    logger.info(f"Rate limiting: {RATE_LIMIT_DEFAULT} (default), {RATE_LIMIT_AUTH} (auth)")
+
+    # Check Redis connection
+    redis_status = cache.health_check()
+    logger.info(f"Redis status: {redis_status.get('status')}")
+
     yield
+
     # Shutdown
     logger.info("Shutting down Nuvie Backend API")
 
@@ -74,6 +110,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Attach limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 # -----------------------
 # Security Headers Middleware
@@ -90,10 +130,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Cache-Control"] = "no-store, max-age=0"
 
         # HSTS in production
         if ENVIRONMENT == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            response.headers["Content-Security-Policy"] = "default-src 'self'"
 
         return response
 
@@ -125,7 +167,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Total-Count"],
+    expose_headers=["X-Request-ID", "X-Total-Count", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     max_age=600,  # Cache preflight for 10 minutes
 )
 
@@ -168,6 +210,7 @@ app.include_router(feed_router)
 # Health & Status Endpoints
 # -----------------------
 @app.get("/health", tags=["System"])
+@limiter.exempt
 def health():
     """
     Health check endpoint for load balancers and orchestration.
@@ -182,26 +225,35 @@ def health():
 
 
 @app.get("/ready", tags=["System"])
+@limiter.exempt
 def ready():
     """
     Readiness check endpoint.
 
     Returns 200 if the service is ready to accept traffic.
-    This can be extended to check database connectivity, etc.
+    Checks database and Redis connectivity.
     """
-    # TODO: Add database connectivity check
-    # TODO: Add AI service health check
+    redis_health = cache.health_check()
+    circuit_status = get_circuit_status()
+
+    # Determine overall readiness
+    redis_ok = redis_health.get("status") in ["healthy", "disabled"]
+    ai_circuit_ok = circuit_status.get("ai_service", {}).get("state") != "open"
+
+    overall_status = "ready" if redis_ok else "degraded"
+
     return {
-        "status": "ready",
+        "status": overall_status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": {
-            "database": "ok",  # Placeholder
-            "ai_service": "ok",  # Placeholder
+            "redis": redis_health,
+            "circuits": circuit_status,
         }
     }
 
 
 @app.get("/", tags=["System"])
+@limiter.exempt
 def root():
     """API root - returns basic service info."""
     return {
@@ -209,4 +261,19 @@ def root():
         "version": VERSION,
         "environment": ENVIRONMENT,
         "docs": "/docs" if DEBUG else None,
+    }
+
+
+@app.get("/metrics", tags=["System"])
+@limiter.exempt
+def metrics():
+    """
+    Metrics endpoint for monitoring.
+
+    Returns circuit breaker and cache metrics.
+    """
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "circuits": get_circuit_status(),
+        "cache": cache.health_check(),
     }

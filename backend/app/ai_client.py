@@ -2,12 +2,12 @@
 AI Service Client for Nuvie Backend.
 
 IMPROVEMENTS:
+- Updated to use httpx (async-capable) instead of requests
+- Added circuit breaker pattern for resilience
+- Added Redis caching for recommendations
 - Fixed function signature to include 'offset' parameter
 - Added proper error handling with custom exception
-- Added internal token authentication
 - Added request_id for tracing
-- Added exclude_movie_ids support
-- Uses correct endpoint path (/ai/recommend)
 """
 
 import os
@@ -15,15 +15,22 @@ import uuid
 import logging
 from typing import List, Dict, Any, Optional
 
-import requests
-from requests.exceptions import RequestException, Timeout, ConnectionError
+import httpx
+from circuitbreaker import CircuitBreakerError
+
+from .circuit_breaker import ai_service_circuit
+from .cache import (
+    get_cached_recommendations,
+    set_cached_recommendations,
+    cache,
+)
 
 logger = logging.getLogger(__name__)
 
 # Configuration
 AI_BASE_URL: str = os.getenv("AI_BASE_URL", "")
 AI_INTERNAL_TOKEN: str = os.getenv("AI_INTERNAL_TOKEN", "")
-AI_TIMEOUT_SECONDS: int = int(os.getenv("AI_TIMEOUT_SECONDS", "5"))
+AI_TIMEOUT_SECONDS: float = float(os.getenv("AI_TIMEOUT_SECONDS", "5"))
 
 
 class AIServiceError(Exception):
@@ -35,30 +42,28 @@ class AIServiceError(Exception):
         self.status_code = status_code
 
 
-def get_ai_recommendations(
+def _convert_user_id(user_id: str) -> int:
+    """Convert user_id string to integer for AI service."""
+    try:
+        # If it's a UUID or long string, hash it
+        if len(user_id) > 10:
+            return abs(hash(user_id)) % (10 ** 9)
+        return int(user_id)
+    except (ValueError, TypeError):
+        return abs(hash(str(user_id))) % (10 ** 9)
+
+
+def _call_ai_service(
     user_id: str,
-    limit: int = 20,
-    offset: int = 0,
+    limit: int,
+    offset: int,
     exclude_movie_ids: Optional[List[int]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Fetch personalized recommendations from the AI service.
+    Internal function to call AI service (wrapped by circuit breaker).
 
-    Args:
-        user_id: The user's ID (string, will be converted to int for AI service)
-        limit: Maximum number of recommendations (1-50)
-        offset: Pagination offset for results
-        exclude_movie_ids: Optional list of movie IDs to exclude
-
-    Returns:
-        List of recommendation dictionaries containing:
-        - movie_id: int
-        - score: float
-        - rank: int
-        - explanation: dict
-
-    Raises:
-        AIServiceError: If the AI service is unavailable or returns an error
+    This function contains the actual HTTP call logic and is protected
+    by the circuit breaker pattern.
     """
     if not AI_BASE_URL:
         raise AIServiceError("AI_BASE_URL not configured")
@@ -67,46 +72,38 @@ def get_ai_recommendations(
     limit = max(1, min(limit, 50))
     offset = max(0, offset)
 
-    # Convert user_id to int for AI service (handles UUID strings)
-    try:
-        # If it's a UUID, hash it to get a numeric ID
-        if len(user_id) > 10:
-            user_id_int = abs(hash(user_id)) % (10 ** 9)
-        else:
-            user_id_int = int(user_id)
-    except (ValueError, TypeError):
-        user_id_int = abs(hash(str(user_id))) % (10 ** 9)
-
+    user_id_int = _convert_user_id(user_id)
     request_id = str(uuid.uuid4())
 
     try:
-        response = requests.post(
-            f"{AI_BASE_URL}/ai/recommend",
-            json={
-                "request_id": request_id,
-                "user_id": user_id_int,
-                "limit": limit,
-                "offset": offset,
-                "exclude_movie_ids": exclude_movie_ids or [],
-                "context": {
-                    "use_social": True,
-                    "seed_movie_ids": [],
-                    "locale": "en-US"
-                }
-            },
-            headers={
-                "Content-Type": "application/json",
-                "X-Internal-Token": AI_INTERNAL_TOKEN,
-            },
-            timeout=AI_TIMEOUT_SECONDS
-        )
+        with httpx.Client(timeout=AI_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                f"{AI_BASE_URL}/ai/recommend",
+                json={
+                    "request_id": request_id,
+                    "user_id": user_id_int,
+                    "limit": limit,
+                    "offset": offset,
+                    "exclude_movie_ids": exclude_movie_ids or [],
+                    "context": {
+                        "use_social": True,
+                        "seed_movie_ids": [],
+                        "locale": "en-US"
+                    }
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-Token": AI_INTERNAL_TOKEN,
+                    "X-Request-ID": request_id,
+                },
+            )
 
         # Handle non-2xx responses
         if response.status_code == 401:
             raise AIServiceError("AI service authentication failed", 401)
         elif response.status_code == 503:
             raise AIServiceError("AI model not ready", 503)
-        elif not response.ok:
+        elif not response.is_success:
             error_detail = "Unknown error"
             try:
                 error_data = response.json()
@@ -135,16 +132,16 @@ def get_ai_recommendations(
 
         return items
 
-    except Timeout:
+    except httpx.TimeoutException:
         logger.warning(f"AI service timeout: user_id={user_id}")
         raise AIServiceError("AI service timeout", 504)
 
-    except ConnectionError as e:
+    except httpx.ConnectError as e:
         logger.error(f"AI service connection error: {e}")
         raise AIServiceError("AI service unavailable", 503)
 
-    except RequestException as e:
-        logger.error(f"AI service request error: {e}")
+    except httpx.HTTPError as e:
+        logger.error(f"AI service HTTP error: {e}")
         raise AIServiceError(f"AI service request failed: {str(e)}")
 
     except AIServiceError:
@@ -153,6 +150,130 @@ def get_ai_recommendations(
     except Exception as e:
         logger.exception(f"Unexpected error calling AI service: {e}")
         raise AIServiceError(f"Unexpected error: {str(e)}")
+
+
+def get_ai_recommendations(
+    user_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    exclude_movie_ids: Optional[List[int]] = None,
+    use_cache: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch personalized recommendations from the AI service.
+
+    Features:
+    - Redis caching (5 minute TTL)
+    - Circuit breaker protection
+    - Automatic retry on transient failures
+
+    Args:
+        user_id: The user's ID (string, will be converted to int for AI service)
+        limit: Maximum number of recommendations (1-50)
+        offset: Pagination offset for results
+        exclude_movie_ids: Optional list of movie IDs to exclude
+        use_cache: Whether to use Redis cache (default True)
+
+    Returns:
+        List of recommendation dictionaries containing:
+        - movie_id: int
+        - score: float
+        - rank: int
+        - explanation: dict
+
+    Raises:
+        AIServiceError: If the AI service is unavailable or returns an error
+        CircuitBreakerError: If the circuit breaker is open
+    """
+    # Check cache first
+    if use_cache and cache.is_available:
+        cached = get_cached_recommendations(user_id, limit, offset)
+        if cached is not None:
+            logger.debug(f"Cache hit for recommendations: user_id={user_id}")
+            return cached
+
+    # Call AI service with circuit breaker protection
+    try:
+        items = ai_service_circuit.call(
+            _call_ai_service,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            exclude_movie_ids=exclude_movie_ids,
+        )
+
+        # Cache successful results
+        if use_cache and items:
+            set_cached_recommendations(user_id, limit, offset, items)
+
+        return items
+
+    except CircuitBreakerError as e:
+        logger.warning(f"AI circuit breaker open for user_id={user_id}")
+        raise AIServiceError("AI service temporarily unavailable (circuit open)", 503)
+
+
+async def get_ai_recommendations_async(
+    user_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    exclude_movie_ids: Optional[List[int]] = None,
+    use_cache: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Async version of get_ai_recommendations.
+
+    Uses httpx async client for non-blocking IO.
+    """
+    # Check cache first
+    if use_cache and cache.is_available:
+        cached = get_cached_recommendations(user_id, limit, offset)
+        if cached is not None:
+            logger.debug(f"Cache hit for recommendations: user_id={user_id}")
+            return cached
+
+    if not AI_BASE_URL:
+        raise AIServiceError("AI_BASE_URL not configured")
+
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+    user_id_int = _convert_user_id(user_id)
+    request_id = str(uuid.uuid4())
+
+    try:
+        async with httpx.AsyncClient(timeout=AI_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{AI_BASE_URL}/ai/recommend",
+                json={
+                    "request_id": request_id,
+                    "user_id": user_id_int,
+                    "limit": limit,
+                    "offset": offset,
+                    "exclude_movie_ids": exclude_movie_ids or [],
+                    "context": {"use_social": True}
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-Token": AI_INTERNAL_TOKEN,
+                },
+            )
+
+        if not response.is_success:
+            raise AIServiceError(f"AI service error: {response.status_code}", response.status_code)
+
+        data = response.json()
+        items = data.get("items", [])
+
+        # Cache results
+        if use_cache and items:
+            set_cached_recommendations(user_id, limit, offset, items)
+
+        return items
+
+    except httpx.TimeoutException:
+        raise AIServiceError("AI service timeout", 504)
+    except httpx.HTTPError as e:
+        raise AIServiceError(f"AI service error: {str(e)}", 503)
 
 
 def get_ai_explanation(
@@ -178,32 +299,28 @@ def get_ai_explanation(
     if not AI_BASE_URL:
         raise AIServiceError("AI_BASE_URL not configured")
 
-    try:
-        user_id_int = int(user_id) if user_id.isdigit() else abs(hash(user_id)) % (10 ** 9)
-    except (ValueError, TypeError):
-        user_id_int = abs(hash(str(user_id))) % (10 ** 9)
-
+    user_id_int = _convert_user_id(user_id)
     request_id = str(uuid.uuid4())
 
     try:
-        response = requests.post(
-            f"{AI_BASE_URL}/ai/explain",
-            json={
-                "request_id": request_id,
-                "user_id": user_id_int,
-                "movie_id": movie_id,
-                "context": {"use_social": True}
-            },
-            headers={
-                "Content-Type": "application/json",
-                "X-Internal-Token": AI_INTERNAL_TOKEN,
-            },
-            timeout=AI_TIMEOUT_SECONDS
-        )
+        with httpx.Client(timeout=AI_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                f"{AI_BASE_URL}/ai/explain",
+                json={
+                    "request_id": request_id,
+                    "user_id": user_id_int,
+                    "movie_id": movie_id,
+                    "context": {"use_social": True}
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-Token": AI_INTERNAL_TOKEN,
+                },
+            )
 
         response.raise_for_status()
         return response.json()
 
-    except RequestException as e:
+    except httpx.HTTPError as e:
         logger.error(f"AI explanation request error: {e}")
         raise AIServiceError(f"Failed to get explanation: {str(e)}")
