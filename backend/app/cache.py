@@ -9,20 +9,20 @@ Provides:
 - Graceful fallback when Redis unavailable
 """
 
-import os
 import json
 import logging
-from typing import Optional, Any, List, Dict, TypeVar, Callable
+import os
 from functools import wraps
-from datetime import timedelta
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 import redis
-from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import RedisError
 
 logger = logging.getLogger(__name__)
 
 # Type variable for generic cache functions
-T = TypeVar('T')
+T = TypeVar("T")
 
 # -----------------------
 # Configuration
@@ -32,9 +32,9 @@ REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true"
 
 # TTL constants (in seconds)
 TTL_RECOMMENDATIONS = int(os.getenv("CACHE_TTL_RECOMMENDATIONS", "300"))  # 5 minutes
-TTL_MOVIE_METADATA = int(os.getenv("CACHE_TTL_MOVIE_METADATA", "3600"))   # 1 hour
-TTL_USER_PROFILE = int(os.getenv("CACHE_TTL_USER_PROFILE", "600"))        # 10 minutes
-TTL_TRENDING = int(os.getenv("CACHE_TTL_TRENDING", "900"))                # 15 minutes
+TTL_MOVIE_METADATA = int(os.getenv("CACHE_TTL_MOVIE_METADATA", "3600"))  # 1 hour
+TTL_USER_PROFILE = int(os.getenv("CACHE_TTL_USER_PROFILE", "600"))  # 10 minutes
+TTL_TRENDING = int(os.getenv("CACHE_TTL_TRENDING", "900"))  # 15 minutes
 
 
 # -----------------------
@@ -43,7 +43,7 @@ TTL_TRENDING = int(os.getenv("CACHE_TTL_TRENDING", "900"))                # 15 m
 class RedisCache:
     """Redis cache client with connection pooling and health checks."""
 
-    _instance: Optional['RedisCache'] = None
+    _instance: Optional["RedisCache"] = None
     _client: Optional[redis.Redis] = None
 
     def __new__(cls):
@@ -101,12 +101,7 @@ class RedisCache:
             logger.warning(f"Redis get error for {key}: {e}")
             return None
 
-    def set(
-        self,
-        key: str,
-        value: str,
-        ttl: int = 300
-    ) -> bool:
+    def set(self, key: str, value: str, ttl: int = 300) -> bool:
         """Set value in cache with TTL."""
         if not self._client:
             return False
@@ -195,11 +190,7 @@ def user_profile_key(user_id: str) -> str:
 # -----------------------
 # Cache Decorators
 # -----------------------
-def cached(
-    key_func: Callable[..., str],
-    ttl: int = 300,
-    skip_cache: bool = False
-):
+def cached(key_func: Callable[..., str], ttl: int = 300, skip_cache: bool = False):
     """
     Decorator for caching function results.
 
@@ -208,6 +199,7 @@ def cached(
         ttl: Time to live in seconds
         skip_cache: If True, always bypass cache (useful for testing)
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
@@ -233,6 +225,7 @@ def cached(
             return result
 
         return wrapper
+
     return decorator
 
 
@@ -248,22 +241,13 @@ def invalidate_user_cache(user_id: str) -> None:
 # -----------------------
 # Convenience Functions
 # -----------------------
-def get_cached_recommendations(
-    user_id: str,
-    limit: int,
-    offset: int
-) -> Optional[List[Dict[str, Any]]]:
+def get_cached_recommendations(user_id: str, limit: int, offset: int) -> Optional[List[Dict[str, Any]]]:
     """Get cached recommendations for a user."""
     key = recommendations_key(user_id, limit, offset)
     return cache.get_json(key)
 
 
-def set_cached_recommendations(
-    user_id: str,
-    limit: int,
-    offset: int,
-    items: List[Dict[str, Any]]
-) -> bool:
+def set_cached_recommendations(user_id: str, limit: int, offset: int, items: List[Dict[str, Any]]) -> bool:
     """Cache recommendations for a user."""
     key = recommendations_key(user_id, limit, offset)
     return cache.set_json(key, items, TTL_RECOMMENDATIONS)
@@ -287,11 +271,7 @@ def get_cached_trending(limit: int, offset: int) -> Optional[List[Dict[str, Any]
     return cache.get_json(key)
 
 
-def set_cached_trending(
-    limit: int,
-    offset: int,
-    items: List[Dict[str, Any]]
-) -> bool:
+def set_cached_trending(limit: int, offset: int, items: List[Dict[str, Any]]) -> bool:
     """Cache trending movies."""
     key = trending_key(limit, offset)
     return cache.set_json(key, items, TTL_TRENDING)

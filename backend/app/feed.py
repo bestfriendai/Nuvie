@@ -10,17 +10,18 @@ IMPROVEMENTS:
 """
 
 import logging
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
-from sqlalchemy.exc import SQLAlchemyError
 
 from backend.session import get_db
+
+from .ai_client import AIServiceError, get_ai_recommendations
 from .auth import get_current_user
-from .ai_client import get_ai_recommendations, AIServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ DEFAULT_LIMIT = 20
 # -----------------------
 class ExplanationFactor(BaseModel):
     """Individual explanation factor."""
+
     type: str
     weight: float
     payload: dict = Field(default_factory=dict)
@@ -44,6 +46,7 @@ class ExplanationFactor(BaseModel):
 
 class Explanation(BaseModel):
     """AI explanation for a recommendation."""
+
     primary_reason: str
     confidence: float = Field(ge=0, le=1)
     text: str
@@ -52,6 +55,7 @@ class Explanation(BaseModel):
 
 class FeedItem(BaseModel):
     """Individual movie item in the feed."""
+
     movie_id: int
     title: Optional[str] = None
     year: Optional[int] = None
@@ -66,6 +70,7 @@ class FeedItem(BaseModel):
 
 class FeedResponse(BaseModel):
     """Response model for feed endpoints."""
+
     user_id: str
     items: List[FeedItem]
     next_offset: int
@@ -110,13 +115,9 @@ def transform_ai_item(item: dict) -> FeedItem:
             confidence=exp.get("confidence", 0.5),
             text=exp.get("text", ""),
             factors=[
-                ExplanationFactor(
-                    type=f.get("type", ""),
-                    weight=f.get("weight", 0),
-                    payload=f.get("payload", {})
-                )
+                ExplanationFactor(type=f.get("type", ""), weight=f.get("weight", 0), payload=f.get("payload", {}))
                 for f in exp.get("factors", [])
-            ]
+            ],
         )
 
     return FeedItem(
@@ -129,7 +130,7 @@ def transform_ai_item(item: dict) -> FeedItem:
         score=item.get("score"),
         rank=item.get("rank"),
         explanation=explanation,
-        reason_chips=item.get("reason_chips", [])
+        reason_chips=item.get("reason_chips", []),
     )
 
 
@@ -138,18 +139,8 @@ def transform_ai_item(item: dict) -> FeedItem:
 # -----------------------
 @router.get("/home", response_model=FeedResponse)
 def home_feed(
-    limit: int = Query(
-        default=DEFAULT_LIMIT,
-        ge=1,
-        le=MAX_LIMIT,
-        description="Number of items to return (1-50)"
-    ),
-    offset: int = Query(
-        default=0,
-        ge=0,
-        le=MAX_OFFSET,
-        description="Pagination offset"
-    ),
+    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT, description="Number of items to return (1-50)"),
+    offset: int = Query(default=0, ge=0, le=MAX_OFFSET, description="Pagination offset"),
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FeedResponse:
@@ -171,20 +162,11 @@ def home_feed(
     try:
         logger.info(f"Fetching AI recommendations: user_id={user_id}, limit={limit}, offset={offset}")
 
-        ai_items = get_ai_recommendations(
-            user_id=user_id,
-            limit=limit,
-            offset=offset
-        )
+        ai_items = get_ai_recommendations(user_id=user_id, limit=limit, offset=offset)
 
         items = [transform_ai_item(item) for item in ai_items]
 
-        return FeedResponse(
-            user_id=user_id,
-            items=items,
-            next_offset=offset + len(items),
-            source="ai"
-        )
+        return FeedResponse(user_id=user_id, items=items, next_offset=offset + len(items), source="ai")
 
     except AIServiceError as e:
         logger.warning(f"AI service error, falling back to DB: {e.message}")
@@ -198,41 +180,41 @@ def home_feed(
     try:
         logger.info(f"Using DB fallback: user_id={user_id}, limit={limit}, offset={offset}")
 
-        rows = db.execute(
-            text("""
+        rows = (
+            db.execute(
+                text(
+                    """
                 SELECT movie_id, title, poster_url, overview, release_date
                 FROM movies
                 ORDER BY movie_id
                 LIMIT :limit OFFSET :offset
-            """),
-            {"limit": limit, "offset": offset}
-        ).mappings().all()
+            """
+                ),
+                {"limit": limit, "offset": offset},
+            )
+            .mappings()
+            .all()
+        )
 
         items = []
         for row in rows:
-            items.append(FeedItem(
-                movie_id=row["movie_id"],
-                title=row.get("title"),
-                year=safe_year(row.get("release_date")),
-                poster_url=row.get("poster_url"),
-                overview=row.get("overview"),
-                release_date=str(row.get("release_date")) if row.get("release_date") else None,
-                reason_chips=["Popular movies"]
-            ))
+            items.append(
+                FeedItem(
+                    movie_id=row["movie_id"],
+                    title=row.get("title"),
+                    year=safe_year(row.get("release_date")),
+                    poster_url=row.get("poster_url"),
+                    overview=row.get("overview"),
+                    release_date=str(row.get("release_date")) if row.get("release_date") else None,
+                    reason_chips=["Popular movies"],
+                )
+            )
 
-        return FeedResponse(
-            user_id=user_id,
-            items=items,
-            next_offset=offset + len(items),
-            source="db_fallback"
-        )
+        return FeedResponse(user_id=user_id, items=items, next_offset=offset + len(items), source="db_fallback")
 
     except SQLAlchemyError as e:
         logger.exception(f"Database error in home_feed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database temporarily unavailable"
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable")
 
 
 @router.get("/trending", response_model=FeedResponse)
@@ -248,38 +230,38 @@ def trending_feed(
     user_id = user["id"]
 
     try:
-        rows = db.execute(
-            text("""
+        rows = (
+            db.execute(
+                text(
+                    """
                 SELECT movie_id, title, poster_url, overview, release_date
                 FROM movies
                 ORDER BY movie_id DESC
                 LIMIT :limit OFFSET :offset
-            """),
-            {"limit": limit, "offset": offset}
-        ).mappings().all()
+            """
+                ),
+                {"limit": limit, "offset": offset},
+            )
+            .mappings()
+            .all()
+        )
 
         items = []
         for row in rows:
-            items.append(FeedItem(
-                movie_id=row["movie_id"],
-                title=row.get("title"),
-                year=safe_year(row.get("release_date")),
-                poster_url=row.get("poster_url"),
-                overview=row.get("overview"),
-                release_date=str(row.get("release_date")) if row.get("release_date") else None,
-                reason_chips=["Trending now"]
-            ))
+            items.append(
+                FeedItem(
+                    movie_id=row["movie_id"],
+                    title=row.get("title"),
+                    year=safe_year(row.get("release_date")),
+                    poster_url=row.get("poster_url"),
+                    overview=row.get("overview"),
+                    release_date=str(row.get("release_date")) if row.get("release_date") else None,
+                    reason_chips=["Trending now"],
+                )
+            )
 
-        return FeedResponse(
-            user_id=user_id,
-            items=items,
-            next_offset=offset + len(items),
-            source="trending"
-        )
+        return FeedResponse(user_id=user_id, items=items, next_offset=offset + len(items), source="trending")
 
     except SQLAlchemyError as e:
         logger.exception(f"Database error in trending_feed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database temporarily unavailable"
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable")

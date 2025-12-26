@@ -10,20 +10,16 @@ IMPROVEMENTS:
 - Added request_id for tracing
 """
 
+import logging
 import os
 import uuid
-import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 from circuitbreaker import CircuitBreakerError
 
+from .cache import cache, get_cached_recommendations, set_cached_recommendations
 from .circuit_breaker import ai_service_circuit
-from .cache import (
-    get_cached_recommendations,
-    set_cached_recommendations,
-    cache,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +43,10 @@ def _convert_user_id(user_id: str) -> int:
     try:
         # If it's a UUID or long string, hash it
         if len(user_id) > 10:
-            return abs(hash(user_id)) % (10 ** 9)
+            return abs(hash(user_id)) % (10**9)
         return int(user_id)
     except (ValueError, TypeError):
-        return abs(hash(str(user_id))) % (10 ** 9)
+        return abs(hash(str(user_id))) % (10**9)
 
 
 def _call_ai_service(
@@ -85,11 +81,7 @@ def _call_ai_service(
                     "limit": limit,
                     "offset": offset,
                     "exclude_movie_ids": exclude_movie_ids or [],
-                    "context": {
-                        "use_social": True,
-                        "seed_movie_ids": [],
-                        "locale": "en-US"
-                    }
+                    "context": {"use_social": True, "seed_movie_ids": [], "locale": "en-US"},
                 },
                 headers={
                     "Content-Type": "application/json",
@@ -115,10 +107,7 @@ def _call_ai_service(
             except Exception:
                 error_detail = response.text[:200] if response.text else "No response body"
 
-            raise AIServiceError(
-                f"AI service error: {error_detail}",
-                response.status_code
-            )
+            raise AIServiceError(f"AI service error: {error_detail}", response.status_code)
 
         # Parse response
         data = response.json()
@@ -208,7 +197,7 @@ def get_ai_recommendations(
 
         return items
 
-    except CircuitBreakerError as e:
+    except CircuitBreakerError:
         logger.warning(f"AI circuit breaker open for user_id={user_id}")
         raise AIServiceError("AI service temporarily unavailable (circuit open)", 503)
 
@@ -250,7 +239,7 @@ async def get_ai_recommendations_async(
                     "limit": limit,
                     "offset": offset,
                     "exclude_movie_ids": exclude_movie_ids or [],
-                    "context": {"use_social": True}
+                    "context": {"use_social": True},
                 },
                 headers={
                     "Content-Type": "application/json",
@@ -310,7 +299,7 @@ def get_ai_explanation(
                     "request_id": request_id,
                     "user_id": user_id_int,
                     "movie_id": movie_id,
-                    "context": {"use_social": True}
+                    "context": {"use_social": True},
                 },
                 headers={
                     "Content-Type": "application/json",

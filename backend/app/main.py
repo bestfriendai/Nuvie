@@ -11,9 +11,9 @@ IMPROVEMENTS:
 - Added logging configuration
 """
 
+import logging
 import os
 import uuid
-import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Callable
@@ -21,23 +21,20 @@ from typing import Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from .feed import router as feed_router
 from .auth import router as auth_router
 from .cache import cache
 from .circuit_breaker import get_circuit_status
+from .feed import router as feed_router
 
 # -----------------------
 # Logging Configuration
 # -----------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # -----------------------
@@ -48,10 +45,7 @@ DEBUG = ENVIRONMENT == "development"
 VERSION = os.getenv("APP_VERSION", "1.0.0")
 
 # CORS origins (comma-separated in env)
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:8080"
-).split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
 
 # Rate limiting configuration
 RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
@@ -238,9 +232,15 @@ def ready():
 
     # Determine overall readiness
     redis_ok = redis_health.get("status") in ["healthy", "disabled"]
-    ai_circuit_ok = circuit_status.get("ai_service", {}).get("state") != "open"
+    ai_circuit_state = circuit_status.get("ai_service", {}).get("state", "unknown")
 
-    overall_status = "ready" if redis_ok else "degraded"
+    # Service is ready if Redis is available; degraded if circuit is open
+    if not redis_ok:
+        overall_status = "degraded"
+    elif ai_circuit_state == "open":
+        overall_status = "degraded"
+    else:
+        overall_status = "ready"
 
     return {
         "status": overall_status,
@@ -248,7 +248,7 @@ def ready():
         "checks": {
             "redis": redis_health,
             "circuits": circuit_status,
-        }
+        },
     }
 
 

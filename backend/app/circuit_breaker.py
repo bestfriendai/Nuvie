@@ -8,21 +8,21 @@ Provides:
 - Metrics and monitoring support
 """
 
+import logging
 import os
 import time
-import logging
-from enum import Enum
-from typing import Callable, TypeVar, Optional, Dict, Any
-from functools import wraps
-from dataclasses import dataclass, field
-from threading import Lock
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
+from functools import wraps
+from threading import Lock
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
 
-from circuitbreaker import CircuitBreaker, CircuitBreakerError
+from circuitbreaker import CircuitBreakerError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 # -----------------------
 # Configuration
@@ -36,8 +36,8 @@ AI_EXPECTED_EXCEPTION = Exception
 # Circuit Breaker States
 # -----------------------
 class CircuitState(str, Enum):
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, reject requests
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, reject requests
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
@@ -47,6 +47,7 @@ class CircuitState(str, Enum):
 @dataclass
 class CircuitBreakerMetrics:
     """Metrics for circuit breaker monitoring."""
+
     total_calls: int = 0
     successful_calls: int = 0
     failed_calls: int = 0
@@ -77,7 +78,7 @@ class ServiceCircuitBreaker:
         name: str,
         failure_threshold: int = 5,
         recovery_timeout: int = 30,
-        expected_exception: type = Exception,
+        expected_exception: Type[BaseException] = Exception,
     ):
         self.name = name
         self.failure_threshold = failure_threshold
@@ -164,10 +165,7 @@ class ServiceCircuitBreaker:
             elif self._failure_count >= self.failure_threshold:
                 self._state = CircuitState.OPEN
                 self._metrics.state_changes += 1
-                logger.warning(
-                    f"Circuit {self.name}: CLOSED -> OPEN "
-                    f"(threshold {self.failure_threshold} reached)"
-                )
+                logger.warning(f"Circuit {self.name}: CLOSED -> OPEN " f"(threshold {self.failure_threshold} reached)")
 
     def call(self, func: Callable[..., T], *args, **kwargs) -> T:
         """
@@ -190,7 +188,7 @@ class ServiceCircuitBreaker:
             result = func(*args, **kwargs)
             self._record_success()
             return result
-        except self.expected_exception as e:
+        except self.expected_exception:
             self._record_failure()
             raise
 
@@ -213,7 +211,7 @@ class ServiceCircuitBreaker:
 # -----------------------
 # Decorator
 # -----------------------
-def circuit_protected(circuit_breaker: ServiceCircuitBreaker):
+def circuit_protected(circuit_breaker: ServiceCircuitBreaker) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """
     Decorator to protect a function with circuit breaker.
 
@@ -222,13 +220,14 @@ def circuit_protected(circuit_breaker: ServiceCircuitBreaker):
         def call_ai_service():
             ...
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> T:
+        def wrapper(*args: Any, **kwargs: Any) -> T:
             return circuit_breaker.call(func, *args, **kwargs)
 
         # Attach circuit breaker to function for inspection
-        wrapper.circuit_breaker = circuit_breaker
+        setattr(wrapper, "circuit_breaker", circuit_breaker)
         return wrapper
 
     return decorator
